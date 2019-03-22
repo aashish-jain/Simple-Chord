@@ -13,19 +13,35 @@ public class Client {
     ObjectInputStream ois;
     ObjectOutputStream oos;
 
-
-    protected void establishConnection(int remoteProcessId){
+    Client(int remoteProcessId){
         /* Establish the connection to server and store it in a Hashmap*/
         Socket socket = null;
         try {
             socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                     remoteProcessId);
-            this.ois = new ObjectInputStream(socket.getInputStream());
             this.oos = new ObjectOutputStream(socket.getOutputStream());
+            this.ois = new ObjectInputStream(socket.getInputStream());
         } catch (IOException e) {
             Log.e(TAG, "Unable to establish connection with the server");
         }
     }
 
-    //TODO: sending joins
+    public void sendJoinRequest(Request request) {
+        try {
+            Log.d(TAG, request.encode());
+            oos.writeUTF(request.encode());
+            oos.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void sendRequest(Request request) {
+        try {
+            oos.writeUTF(request.encode());
+            oos.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 }

@@ -1,5 +1,10 @@
 package edu.buffalo.cse.cse486586.simpledht;
 
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
@@ -8,10 +13,10 @@ import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
-//import android.database.DatabaseUtils;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
+import android.os.StrictMode;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
@@ -42,6 +47,12 @@ public class SimpleDhtProvider extends ContentProvider {
         return formatter.toString();
     }
 
+    public static void enableStrictMode() {
+        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+        StrictMode.setThreadPolicy(policy);
+    }
+
+
     private int getProcessId(){
         /* https://stackoverflow.com/questions/10115533/how-to-getsystemservice-within-a-contentprovider-in-android */
         String telephoneNumber =
@@ -63,10 +74,10 @@ public class SimpleDhtProvider extends ContentProvider {
             deleted = dbWriter.delete(KeyValueStorageContract.KeyValueEntry.TABLE_NAME,
                     null, null);
         else {
+            //https://stackoverflow.com/questions/7510219/deleting-row-in-sqlite-in-android
             deleted = dbWriter.delete(KeyValueStorageContract.KeyValueEntry.TABLE_NAME,
                     KeyValueStorageContract.KeyValueEntry.COLUMN_KEY + "='" + selection + "'",
                         null);
-//                    new String[]{selection});
         }
         Log.d(TAG, "Removed "+ deleted);
         return deleted;
@@ -102,15 +113,19 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.d(TAG, "id is " + myID + " " + myHashedID);
 
         //TODO: start the server thread
+        new Server().start();
 
+        enableStrictMode();
+        int joinServerPort = 11108;
         if(myID != 5554){
-            try {
-                /* Safety mechanism to ensure that the join request is sent only after 5554 is active*/
-                Thread.sleep(1000);
-                //TODO: Connection request to 5554*2
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            Request request = new Request(myID,null, RequestType.JOIN);
+            Log.d(TAG, "Attempting to join");
+            Client client = new Client(joinServerPort);
+            client.sendJoinRequest(request);
+            Log.d(TAG, "Joined");
+            client.sendRequest(new Request(0, null, RequestType.QUIT));
+            //TODO: Connection request to 5554*2
+
         }
 
         return true;
@@ -144,7 +159,7 @@ public class SimpleDhtProvider extends ContentProvider {
             /* https://developer.android.com/training/data-storage/sqlite */
             cursor = dbReader.query(
                     KeyValueStorageContract.KeyValueEntry.TABLE_NAME,   // The table to query
-                    this.projection,             // The array of columns to return (pass null to get all)
+                    this.projection,        // The array of columns to return (pass null to get all)
                     selection,              // The columns for the WHERE clause
                     selectionArgs,          // The values for the WHERE clause
                     null,           // don't group the rows
@@ -164,4 +179,67 @@ public class SimpleDhtProvider extends ContentProvider {
         return 0;
     }
 
+    private class Server extends Thread {
+        static final int SERVER_PORT = 10000;
+        static final String TAG = "SERVER_TASK";
+
+        /* https://stackoverflow.com/questions/10131377/socket-programming-multiple-client-to-one-server*/
+        private class ServerThread extends Thread {
+            ObjectOutputStream oos;
+            ObjectInputStream ois;
+
+            static final String TAG = "SERVER_THREAD";
+
+
+            public  ServerThread(Socket socket) {
+                try {
+                    this.ois = new ObjectInputStream(socket.getInputStream());
+                    this.oos = new ObjectOutputStream(socket.getOutputStream());
+                    Log.d(TAG, "Server started");
+                } catch (Exception e) {
+                    Log.e(TAG, "Failure");
+                }
+            }
+
+            @Override
+            public void run() {
+                //Read from the socket
+                try {
+                    //TODO: Make server respond to queries
+                    while (true) {
+                        Request request = new Request(ois.readUTF());
+                        if(request.isJoin()){
+                            Log.d(TAG, "Recieved Join request from " + request.getSenderId());
+                        }
+                        if(request.isQuit()) {
+                            Log.d(TAG, "Dying");
+                            break;
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Failure");
+                }
+            }
+        }
+
+        public void run() {
+            /* Open a socket at SERVER_PORT */
+            ServerSocket serverSocket = null;
+            try {
+                serverSocket = new ServerSocket(SERVER_PORT);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            /* Accept a client connection and spawn a thread to respond */
+            while (true) {
+                try {
+                    Socket socket = serverSocket.accept();
+                    new ServerThread(socket).start();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
 }
