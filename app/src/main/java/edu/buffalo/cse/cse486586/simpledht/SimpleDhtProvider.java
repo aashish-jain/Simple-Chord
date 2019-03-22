@@ -28,6 +28,8 @@ public class SimpleDhtProvider extends ContentProvider {
     int myID;
     String myHashedID;
     ChordNeighbour successor, predecessor;
+    static final String DELETE_TAG = "DELETE_TAG", CREATE_TAG = "CREATE_TAG", INSERT_TAG = "INSERT_TAG", QUERY_TAG = "QUERY_TAG";
+
     static String[] projection = new String[] {
         KeyValueStorageContract.KeyValueEntry.COLUMN_KEY,
                 KeyValueStorageContract.KeyValueEntry.COLUMN_VALUE
@@ -52,7 +54,6 @@ public class SimpleDhtProvider extends ContentProvider {
         StrictMode.setThreadPolicy(policy);
     }
 
-
     private int getProcessId(){
         /* https://stackoverflow.com/questions/10115533/how-to-getsystemservice-within-a-contentprovider-in-android */
         String telephoneNumber =
@@ -63,23 +64,59 @@ public class SimpleDhtProvider extends ContentProvider {
         return id;
     }
 
+    private boolean belongsToMe(String key){
+        //TODO: finish the belongs to me logic
+        key = genHash(key);
+        // If has neighbours
+        if(predecessor != null && successor!=null) {
+            // Hash of key lies in its range then return true else false
+            if (key.compareTo(predecessor.getHashedID()) > 0 && key.compareTo(myHashedID) < 0)
+                return true;
+            else
+                return false;
+        }
+        //else return true
+        else
+            return true;
+    }
+
+    public int deleteSingle(String key){
+        //https://stackoverflow.com/questions/7510219/deleting-row-in-sqlite-in-android
+        return dbWriter.delete(KeyValueStorageContract.KeyValueEntry.TABLE_NAME,
+                KeyValueStorageContract.KeyValueEntry.COLUMN_KEY + "='" + key + "'",
+                null);
+    }
+
+    public int deleteAllLocal(){
+        return dbWriter.delete(KeyValueStorageContract.KeyValueEntry.TABLE_NAME,
+                null, null);
+    }
+
+    public int deleteAll(){
+        Log.d(DELETE_TAG, "Not yet implemented");
+        return 0;
+    }
+
+    public int deleteFromDHT(String key){
+
+        Log.d(DELETE_TAG, "Not yet implemented");
+        return 0;
+    }
+
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
 
-        final String TAG = "DELETE_TAG";
         /* https://stackoverflow.com/questions/7510219/deleting-row-in-sqlite-in-android */
-        int deleted = 0;
-
-        if( selection.equals("@") || selection.equals("*"))
-            deleted = dbWriter.delete(KeyValueStorageContract.KeyValueEntry.TABLE_NAME,
-                    null, null);
-        else {
-            //https://stackoverflow.com/questions/7510219/deleting-row-in-sqlite-in-android
-            deleted = dbWriter.delete(KeyValueStorageContract.KeyValueEntry.TABLE_NAME,
-                    KeyValueStorageContract.KeyValueEntry.COLUMN_KEY + "='" + selection + "'",
-                        null);
-        }
-        Log.d(TAG, "Removed "+ deleted);
+        int deleted;
+        if(belongsToMe(selection))
+            deleted = deleteSingle(selection);
+        else if( selection.equals("@"))
+            deleted = deleteAllLocal();
+        else if(selection.equals("*"))
+            deleted = deleteAll();
+        else
+            deleted = deleteFromDHT(selection);
+        Log.d(DELETE_TAG, "Removed "+ deleted + " messages");
         return deleted;
     }
 
@@ -88,13 +125,25 @@ public class SimpleDhtProvider extends ContentProvider {
         return null;
     }
 
+
+    public long insertLocal(ContentValues values){
+        return dbWriter.insertWithOnConflict(KeyValueStorageContract.KeyValueEntry.TABLE_NAME,
+                null, values, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public long insertInDHT(ContentValues values){
+        Log.d(INSERT_TAG, "Not yet implemented");
+        return 0;
+    }
+
     @Override
     public Uri insert(Uri uri, ContentValues values) {
-        //TODO: add lookup and fix *
-        final String TAG = "INSERT_TAG";
-        Log.d(TAG, values.toString());
-
-        dbWriter.insertWithOnConflict(KeyValueStorageContract.KeyValueEntry.TABLE_NAME, null, values, SQLiteDatabase.CONFLICT_REPLACE);
+        //TODO: add lookup
+        Log.d(INSERT_TAG, values.toString());
+        if(belongsToMe(values.getAsString("key")))
+            insertLocal(values);
+        else
+            insertInDHT(values);
         return uri;
     }
 
@@ -131,46 +180,59 @@ public class SimpleDhtProvider extends ContentProvider {
         return true;
     }
 
+    public Cursor queryAllLocal(){
+        //Query everything
+        return dbReader.query(KeyValueStorageContract.KeyValueEntry.TABLE_NAME, this.projection,
+                null, null, null, null,
+                null, null);
+    }
+
+    public Cursor queryAll(){
+        Log.d(QUERY_TAG, "Not yet implemented");
+        return null;
+    }
+
+    public Cursor querySingle(String key){
+        //TODO: add lookup and fix *
+        String[] selectionArgs = new String[]{ key };
+        String selection = KeyValueStorageContract.KeyValueEntry.COLUMN_KEY + " = ?";
+
+        /* https://developer.android.com/training/data-storage/sqlite */
+        return dbReader.query(
+                KeyValueStorageContract.KeyValueEntry.TABLE_NAME,   // The table to query
+                this.projection,        // The array of columns to return (pass null to get all)
+                selection,              // The columns for the WHERE clause
+                selectionArgs,          // The values for the WHERE clause
+                null,           // don't group the rows
+                null,            // don't filter by row groups
+                null               // The sort order
+        );
+    }
+
+
+
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
 
         /* https://developer.android.com/training/data-storage/sqlite */
-
-        /* Define a projection that specifies which columns from the database
-         * you will actually use after this query.
-         */
-
-        final String TAG = "QUERY_TAG";
-        Log.d(TAG, "Querying " + selection);
+        Log.d(QUERY_TAG, "Querying " + selection);
         Cursor cursor = null;
         /* Query for all local data*/
-        if(selection.equals("@") || selection.equals("*")){
-            //Query everything
-            cursor = dbReader.query(KeyValueStorageContract.KeyValueEntry.TABLE_NAME, this.projection,
-                    null, null, null, null,
-                    null, null);
+        if(selection.equals("*"))
+            cursor = queryAll();
+        else if(selection.equals("@"))
+            cursor = queryAllLocal();
+        else if(belongsToMe(selection)){
+            querySingle(selection);
         }
         else{
-            //TODO: add lookup and fix *
-            selectionArgs = new String[]{ selection };
-            selection = KeyValueStorageContract.KeyValueEntry.COLUMN_KEY + " = ?";
 
-            /* https://developer.android.com/training/data-storage/sqlite */
-            cursor = dbReader.query(
-                    KeyValueStorageContract.KeyValueEntry.TABLE_NAME,   // The table to query
-                    this.projection,        // The array of columns to return (pass null to get all)
-                    selection,              // The columns for the WHERE clause
-                    selectionArgs,          // The values for the WHERE clause
-                    null,           // don't group the rows
-                    null,            // don't filter by row groups
-                    sortOrder               // The sort order
-            );
         }
         if (cursor.getCount() == 0)
-            Log.d(TAG, selectionArgs[0] + " not found :-(");
+            Log.d(QUERY_TAG, selectionArgs[0] + " not found :-(");
         else
-            Log.d(TAG, " Found = " + cursor.getCount() +" "+ DatabaseUtils.dumpCursorToString(cursor));
+            Log.d(QUERY_TAG, " Found = " + cursor.getCount() +" "+ DatabaseUtils.dumpCursorToString(cursor));
         return cursor;
     }
 
