@@ -127,7 +127,6 @@ public class OnTestClickListener implements OnClickListener {
 						resultCursor.close();
 						throw new Exception();
 					}
-
 					resultCursor.close();
 				}
 			} catch (Exception e) {

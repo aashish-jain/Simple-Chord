@@ -53,14 +53,3 @@ class KeyValueStorageDBHelper extends SQLiteOpenHelper {
         onUpgrade(db, oldVersion, newVersion);
     }
 }
-
-class Hasher {
-    private String genHash(String input) throws NoSuchAlgorithmException {
-        MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
-        byte[] sha1Hash = sha1.digest(input.getBytes());
-        Formatter formatter = new Formatter();
-        for (byte b : sha1Hash)
-            formatter.format("%02x", b);
-        return formatter.toString();
-    }
-}
