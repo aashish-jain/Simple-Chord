@@ -3,7 +3,7 @@ package edu.buffalo.cse.cse486586.simpledht;
 import java.io.IOException;
 
 enum RequestType {
-    JOIN, QUERY, INSERT, DELETE, QUIT
+    JOIN, QUERY, INSERT, DELETE, QUIT, FETCH_PREDECESSOR, FETCH_SUCCESSOR, FETCH_NEW_NEIGHBOURS
 }
 
 public class Request {
@@ -11,11 +11,13 @@ public class Request {
     private String hashedQuery;
     private String query;
     private int senderId;
+    String hashedSenderId;
     private RequestType requestType;
 
 
     Request(int senderId, String query, RequestType requestType) {
         this.senderId = senderId;
+        this.hashedSenderId = SimpleDhtProvider.genHash(Integer.toString(senderId));
         this.query = query;
         this.requestType = requestType;
         if (query != null)
@@ -32,33 +34,24 @@ public class Request {
             this.requestType = RequestType.valueOf(strings[1]);
             this.hashedQuery = strings[2];
             this.senderId = Integer.parseInt(strings[3]);
+            this.hashedSenderId = SimpleDhtProvider.genHash(this.query);
         } else
             throw new IOException("Unable to parse the String");
     }
 
-    public boolean isJoin() {
-        return requestType.equals(RequestType.JOIN);
+    public RequestType getRequestType() {
+        return requestType;
     }
 
-    public boolean isQuery() {
-        return requestType.equals((RequestType.QUERY));
-    }
 
-    public boolean isInsert() {
-        return requestType.equals((RequestType.INSERT));
-    }
-
-    public boolean isDelete() {
-        return requestType.equals((RequestType.DELETE));
-    }
-
-    public boolean isQuit(){
-        return requestType.equals(RequestType.QUIT);
-    }
-
-    public int getSenderId(){
+    public int getSenderId() {
         return this.senderId;
     }
+
+    public String getHashedSenderId() {
+        return this.hashedSenderId;
+    }
+
     @Override
     public String toString() {
         return query + separator + requestType + separator + hashedQuery + separator + senderId;

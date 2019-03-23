@@ -9,18 +9,21 @@ import java.net.InetAddress;
 import java.net.Socket;
 
 public class Client {
-    final String TAG = "CLIENT";
-    ObjectInputStream ois;
-    ObjectOutputStream oos;
+    private final String TAG = "CLIENT";
+    private ObjectInputStream ois;
+    private ObjectOutputStream oos;
+    boolean isConnected;
 
-    Client(int remoteProcessId){
+    Client(int remoteProcessId) {
         /* Establish the connection to server and store it in a Hashmap*/
         Socket socket = null;
+        isConnected = false;
         try {
             socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                     remoteProcessId);
             this.oos = new ObjectOutputStream(socket.getOutputStream());
             this.ois = new ObjectInputStream(socket.getInputStream());
+            isConnected = true;
         } catch (IOException e) {
             Log.e(TAG, "Unable to establish connection with the server");
         }
@@ -28,7 +31,7 @@ public class Client {
 
     public void sendJoinRequest(Request request) {
         try {
-            Log.d(TAG, request.encode());
+            Log.d(TAG, request.toString());
             oos.writeUTF(request.encode());
             oos.flush();
         } catch (IOException e) {
@@ -43,5 +46,15 @@ public class Client {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public int readInt() {
+        int val = 0;
+        try {
+            val = ois.readInt();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return val;
     }
 }
