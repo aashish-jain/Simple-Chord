@@ -66,8 +66,6 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     private boolean belongsToMe(String key){
-        //TODO: finish the belongs to me logic
-        key = genHash(key);
         // If has neighbours
         if(predecessor != null && successor!=null) {
             // Hash of key lies in its range then return true else false
@@ -110,6 +108,7 @@ public class SimpleDhtProvider extends ContentProvider {
 
         /* https://stackoverflow.com/questions/7510219/deleting-row-in-sqlite-in-android */
         int deleted;
+        selection = genHash(selection);
         if(belongsToMe(selection))
             deleted = deleteSingle(selection);
         else if( selection.equals("@"))
@@ -141,7 +140,11 @@ public class SimpleDhtProvider extends ContentProvider {
 
     @Override
     public Uri insert(Uri uri, ContentValues values) {
-        //TODO: add lookup
+        ContentValues hashedValues = new ContentValues();
+        hashedValues.put(KeyValueStorageContract.KeyValueEntry.COLUMN_VALUE,
+                values.getAsString(KeyValueStorageContract.KeyValueEntry.COLUMN_VALUE));
+        hashedValues.put(KeyValueStorageContract.KeyValueEntry.COLUMN_KEY,
+                genHash(values.getAsString(KeyValueStorageContract.KeyValueEntry.COLUMN_KEY)) );
         Log.d(INSERT_TAG, values.toString());
         if(belongsToMe(values.getAsString("key")))
             insertLocal(values);
@@ -164,7 +167,6 @@ public class SimpleDhtProvider extends ContentProvider {
 
         Log.d(TAG, "id is " + myID + " " + myHashedID);
 
-        //TODO: start the server thread
         new Server().start();
 
         enableStrictMode();
@@ -176,7 +178,6 @@ public class SimpleDhtProvider extends ContentProvider {
             client.sendJoinRequest(request);
             Log.d(TAG, "Joined");
             client.sendRequest(new Request(0, null, RequestType.QUIT));
-            //TODO: Connection request to 5554*2
         }
         return true;
     }
@@ -195,7 +196,6 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     public Cursor querySingle(String key){
-        //TODO: add lookup and fix *
         String[] selectionArgs = new String[]{ key };
         String selection = KeyValueStorageContract.KeyValueEntry.COLUMN_KEY + " = ?";
 
@@ -220,6 +220,7 @@ public class SimpleDhtProvider extends ContentProvider {
             String sortOrder) {
 
         /* https://developer.android.com/training/data-storage/sqlite */
+        selection = genHash(selection);
         Log.d(QUERY_TAG, "Querying " + selection);
         Cursor cursor = null;
         /* Query for all local data*/
@@ -269,7 +270,6 @@ public class SimpleDhtProvider extends ContentProvider {
             public void run() {
                 //Read from the socket
                 try {
-                    //TODO: Make server respond to queries
                     while (true) {
                         Request request = new Request(ois.readUTF());
                         if(request.isJoin()){
