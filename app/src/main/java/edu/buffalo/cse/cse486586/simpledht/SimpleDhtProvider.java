@@ -16,6 +16,7 @@ import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
+import android.os.CancellationSignal;
 import android.os.StrictMode;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -93,14 +94,15 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     public int deleteAll(){
-        Log.d(DELETE_TAG, "Not yet implemented");
-        return 0;
+//        Log.d(DELETE_TAG, "Not yet implemented");
+//        return 0;
+        return deleteAllLocal();
     }
 
     public int deleteFromDHT(String key){
-
-        Log.d(DELETE_TAG, "Not yet implemented");
-        return 0;
+//        Log.d(DELETE_TAG, "Not yet implemented");
+//        return 0;
+        return deleteSingle(key);
     }
 
     @Override
@@ -132,8 +134,9 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     public long insertInDHT(ContentValues values){
-        Log.d(INSERT_TAG, "Not yet implemented");
-        return 0;
+//        Log.d(INSERT_TAG, "Not yet implemented");
+//        return 0;
+        return insertLocal(values);
     }
 
     @Override
@@ -174,9 +177,7 @@ public class SimpleDhtProvider extends ContentProvider {
             Log.d(TAG, "Joined");
             client.sendRequest(new Request(0, null, RequestType.QUIT));
             //TODO: Connection request to 5554*2
-
         }
-
         return true;
     }
 
@@ -188,8 +189,9 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     public Cursor queryAll(){
-        Log.d(QUERY_TAG, "Not yet implemented");
-        return null;
+//        Log.d(QUERY_TAG, "Not yet implemented");
+//        return null;
+        return queryAllLocal();
     }
 
     public Cursor querySingle(String key){
@@ -209,7 +211,9 @@ public class SimpleDhtProvider extends ContentProvider {
         );
     }
 
-
+    public Cursor queryInDHT(String key) {
+        return querySingle(key);
+    }
 
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
@@ -223,14 +227,12 @@ public class SimpleDhtProvider extends ContentProvider {
             cursor = queryAll();
         else if(selection.equals("@"))
             cursor = queryAllLocal();
-        else if(belongsToMe(selection)){
-            querySingle(selection);
-        }
-        else{
-
-        }
+        else if(belongsToMe(selection))
+            cursor = querySingle(selection);
+        else
+            cursor = queryInDHT(selection);
         if (cursor.getCount() == 0)
-            Log.d(QUERY_TAG, selectionArgs[0] + " not found :-(");
+            Log.d(QUERY_TAG, selection + " not found :-(");
         else
             Log.d(QUERY_TAG, " Found = " + cursor.getCount() +" "+ DatabaseUtils.dumpCursorToString(cursor));
         return cursor;
