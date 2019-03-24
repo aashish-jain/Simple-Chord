@@ -29,12 +29,12 @@ public class Request {
     /* To parse from the string */
     Request(String string) throws IOException {
         String[] strings = string.split(this.seperator);
-        if (strings.length == 4) {
+        if (strings.length == 5) {
             this.query = strings[0];
             this.requestType = RequestType.valueOf(strings[1]);
             this.hashedQuery = strings[2];
             this.senderId = Integer.parseInt(strings[3]);
-            this.hashedSenderId = SimpleDhtProvider.genHash(this.query);
+            this.hashedSenderId = strings[4];
         } else
             throw new IOException("Unable to parse the String");
     }
@@ -54,10 +54,12 @@ public class Request {
 
     @Override
     public String toString() {
-        return query + separator + requestType + separator + hashedQuery + separator + senderId;
+        return query + separator + requestType + separator + hashedQuery + separator +
+                senderId + separator + hashedSenderId;
     }
 
     public String encode() {
-        return query + seperator + requestType + seperator + hashedQuery + seperator + senderId;
+        return query + seperator + requestType + seperator + hashedQuery + seperator +
+                senderId + seperator + hashedSenderId;
     }
 }
