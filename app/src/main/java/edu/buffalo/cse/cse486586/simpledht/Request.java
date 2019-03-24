@@ -3,7 +3,7 @@ package edu.buffalo.cse.cse486586.simpledht;
 import java.io.IOException;
 
 enum RequestType {
-    JOIN, QUERY, INSERT, DELETE, QUIT, UPDATE_NEIGHBOURS;
+    JOIN, QUERY, INSERT, DELETE, QUIT, UPDATE_SUCCESSOR, UPDATE_PREDECESSOR;
 }
 
 public class Request {
@@ -43,6 +43,10 @@ public class Request {
         return requestType;
     }
 
+    public String getQuery(){
+        return query;
+    }
+
 
     public int getSenderId() {
         return this.senderId;
@@ -50,6 +54,10 @@ public class Request {
 
     public String getHashedSenderId() {
         return this.hashedSenderId;
+    }
+
+    public int getIntegerFromQuery(){
+        return Integer.parseInt(query);
     }
 
     @Override

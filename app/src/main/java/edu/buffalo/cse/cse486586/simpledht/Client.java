@@ -19,8 +19,10 @@ public class Client {
         Socket socket = null;
         isConnected = false;
         try {
+            Log.d(TAG, "Attempting connection");
             socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                     remoteProcessId);
+            Log.d(TAG, "Connected to server");
             this.oos = new ObjectOutputStream(socket.getOutputStream());
             this.ois = new ObjectInputStream(socket.getInputStream());
             isConnected = true;
