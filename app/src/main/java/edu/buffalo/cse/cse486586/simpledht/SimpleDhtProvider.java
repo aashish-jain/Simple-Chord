@@ -18,7 +18,9 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Formatter;
+import java.util.LinkedList;
 
 public class SimpleDhtProvider extends ContentProvider {
     /* https://developer.android.com/training/data-storage/sqlite */
@@ -28,6 +30,7 @@ public class SimpleDhtProvider extends ContentProvider {
     int myID;
     String myHashedID;
     ChordNeighbour successor, predecessor;
+    ArrayList<Integer> chordRing;
     static final int serverId = 5554;
     static final String DELETE_TAG = "DELETE_TAG", CREATE_TAG = "CREATE_TAG", INSERT_TAG = "INSERT_TAG", QUERY_TAG = "QUERY_TAG";
 
@@ -173,13 +176,16 @@ public class SimpleDhtProvider extends ContentProvider {
             if (client.isConnected) {
                 client.sendJoinRequest(request);
                 Log.d(CREATE_TAG, "Joined");
-                int pred, succ;
-                pred = client.readInt();
-                succ = client.readInt();
-                client.sendRequest(new Request(0, null, RequestType.QUIT));
-                Log.d(CREATE_TAG, "Successor and Predecessor are " + succ + " " + pred);
+//                int pred, succ;
+//                pred = client.readInt();
+//                succ = client.readInt();
+//                client.sendRequest(new Request(0, null, RequestType.QUIT));
+//                Log.d(CREATE_TAG, "Successor and Predecessor are " + succ + " " + pred);
             } else
                 Log.d(CREATE_TAG, "Join server isn't up");
+        } else {
+            chordRing = new ArrayList<Integer>();
+            chordRing.add(myID);
         }
         return true;
     }
@@ -268,61 +274,44 @@ public class SimpleDhtProvider extends ContentProvider {
 
             public void respondToJoinRequest(Request request) {
                 int senderId = request.getSenderId();
+                String newNodeHash = request.getHashedSenderId();
+
                 Log.d(TAG, "Recieved Join request from " + senderId);
+                Log.d(TAG, "Message =  " + request.toString());
                 /* Safe-check to ensure that only 5554 handles the join request*/
                 if (myID != serverId)
                     return;
+                int i = 0;
                 /* If no successor or predecessor until now then the new node is
                  * both successor and predecessor */
                 int predecessorId, successorId;
-                //TODO: Working :-)
-                if (successor == null || predecessor == null) {
-                    /* Successor */
-                    predecessorId = myID;
-                    /* Predecessor */
-                    successorId = myID;
-                    predecessor = new ChordNeighbour(senderId);
-                    successor = new ChordNeighbour(senderId);
-                } else {
-                    Log.d(TAG, "other node join");
-                    successor.request(new Request(senderId, null, RequestType.FETCH_NEW_NEIGHBOURS));
-                    predecessorId = successor.fetchIntegerResponse();
-                    successorId = successor.fetchIntegerResponse();
+
+                int indexToInsert = 0;
+                String nodeHash = null;
+                for (Integer node : chordRing){
+                    nodeHash = genHash(node.toString());
+                    if( nodeHash.compareTo(newNodeHash) < 0)
+                        break;
+                    indexToInsert++;
                 }
-                /* Send the value back to the machine*/
+                chordRing.add(indexToInsert, senderId);
+                //Get the chordRing
+                if(indexToInsert == chordRing.size()) {
+                    successorId = chordRing.get(0);
+                    predecessorId = chordRing.get(indexToInsert - 1);
+                }
+                else if(indexToInsert == 0){
+                    predecessorId = chordRing.get(chordRing.size() - 1);
+                    successorId = chordRing.get(indexToInsert + 1);
+                }
+                else{
+                    predecessorId = chordRing.get(indexToInsert - 1);
+                    successorId = chordRing.get(indexToInsert + 1);
+                }
                 try {
                     Log.d(TAG, " Got predId = " + predecessorId + " succId = " + successorId);
                     oos.writeInt(predecessorId);
                     oos.writeInt(successorId);
-                    oos.flush();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            public void fetchNewNeighbours(Request request) {
-                String requesterId = request.getHashedSenderId(),
-                        predecessorId = predecessor.getHashedID(),
-                        successorId = successor.getHashedID();
-                int predId = 0, succId = 0;
-                if (requesterId.compareTo(predecessorId) > 0 &&
-                        (requesterId.compareTo(successorId) < 0
-                                || predecessorId.compareTo(successorId) < 0)) {
-                    predId = myID;
-                    succId = successor.getId();
-                    //TODO: update self neighbours
-                }
-                // Recursively Fetch the neighbour
-                else {
-                    Log.d(TAG, "Asking " + successor.getId());
-                    successor.request(new Request(request.getSenderId(), null, RequestType.FETCH_NEW_NEIGHBOURS));
-                    predId = successor.fetchIntegerResponse();
-                    succId = successor.fetchIntegerResponse();
-                }
-                try {
-                    Log.d(TAG, "Found neighbours " + predId + " " + succId);
-                    oos.writeInt(predId);
-                    oos.writeInt(succId);
                     oos.flush();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -342,7 +331,6 @@ public class SimpleDhtProvider extends ContentProvider {
                     }
                     switch (request.getRequestType()) {
                         case JOIN:
-                            Log.d(TAG, "JOIN " + request.toString());
                             respondToJoinRequest(request);
                             break;
                         case QUIT:
@@ -352,15 +340,16 @@ public class SimpleDhtProvider extends ContentProvider {
                             break;
                         case INSERT:
                             break;
-                        case FETCH_SUCCESSOR:
-                            break;
-                        case FETCH_PREDECESSOR:
-                            break;
-                        case FETCH_NEW_NEIGHBOURS:
-                            break;
                         case DELETE:
                             break;
+                        case UPDATE_NEIGHBOURS:
+                            //TODO: complete
+//                            predecessor = new ChordNeighbour(senderId);
+//                            successor = new ChordNeighbour(senderId);
+                            break;
                         default:
+                            Log.d(TAG, "Unknown Operation. :-/");
+                            return;
 
                     }
                 }

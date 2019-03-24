@@ -3,7 +3,7 @@ package edu.buffalo.cse.cse486586.simpledht;
 import java.io.IOException;
 
 enum RequestType {
-    JOIN, QUERY, INSERT, DELETE, QUIT, FETCH_PREDECESSOR, FETCH_SUCCESSOR, FETCH_NEW_NEIGHBOURS
+    JOIN, QUERY, INSERT, DELETE, QUIT, UPDATE_NEIGHBOURS;
 }
 
 public class Request {
