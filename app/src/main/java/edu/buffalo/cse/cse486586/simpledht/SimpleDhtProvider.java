@@ -11,10 +11,10 @@ import android.os.StrictMode;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
-import java.awt.font.TextAttribute;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.MessageDigest;
@@ -150,6 +150,24 @@ public class SimpleDhtProvider extends ContentProvider {
         return uri;
     }
 
+    private void fetchNeighbours() {
+        Request request = new Request(myID, null, RequestType.JOIN);
+        Client client = null;
+        try {
+            Log.d(CREATE_TAG, "Attempting to join");
+            client = new Client(serverId * 2);
+            client.oos.writeUTF(request.encode());
+            client.oos.flush();
+            Log.d(CREATE_TAG, "Joined!. Reading...");
+            int number1 = client.ois.readInt(), number2 = client.ois.readInt();
+            client.oos.writeUTF(new Request(myID, null, RequestType.QUIT).encode());
+            client.oos.flush();
+            Log.d(CREATE_TAG, "Updated successor and predecessor. "+ number1 + " " + number2);
+        } catch (IOException e) {
+            Log.d("CLIENT", "avd 0 isn't up");
+        }
+    }
+
     @Override
     public boolean onCreate() {
         dbHelper = new KeyValueStorageDBHelper(getContext());
@@ -168,20 +186,8 @@ public class SimpleDhtProvider extends ContentProvider {
         /* Because all calls are blocking calls running it on the main thread*/
         enableStrictMode();
 
-        int joinServerPort = 11108;
         if (myID != serverId) {
-            Request request = new Request(myID, null, RequestType.JOIN);
-            Log.d(CREATE_TAG, "Attempting to join");
-            Client client = new Client(joinServerPort);
-            if (client.isConnected) {
-                client.sendJoinRequest(request);
-                Log.d(CREATE_TAG, "Joined!");
-                predecessor = new ChordNeighbour(client.readInt() * 2);
-                successor = new ChordNeighbour(client.readInt() * 2);
-                client.sendRequest(new Request(myID, null, RequestType.QUIT));
-                Log.d(CREATE_TAG, "Updated successor and predecessor");
-            } else
-                Log.d(CREATE_TAG, "Join server isn't up");
+            fetchNeighbours();
         } else {
             chordRing = new ArrayList<Integer>();
             chordRing.add(myID);
@@ -305,51 +311,37 @@ public class SimpleDhtProvider extends ContentProvider {
                         chordRing.get(0) : chordRing.get(indexToInsert + 1);
                 predecessorId = (indexToInsert == 0) ?
                         chordRing.get(chordRing.size() - 1) : chordRing.get(indexToInsert - 1);
-                Log.d(TAG, " Got predId = " + predecessorId + " succId = " + successorId);
+                Log.d(TAG, senderId + " Got predId = " + predecessorId + " succId = " + successorId);
 
                 try {
                     oos.writeInt(predecessorId);
                     oos.writeInt(successorId);
                     oos.flush();
+                    Log.d(TAG, "Flushed to "+ senderId);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-
-//                /* Set the new neighbours of the node */
-//                Client newNode = new Client(senderId * 2);
-//                newNode.sendRequest(new Request(myID, Integer.toString(successorId) , RequestType.UPDATE_SUCCESSOR));
-//                newNode.sendRequest(new Request(myID, Integer.toString(predecessorId) , RequestType.UPDATE_PREDECESSOR));
-//                newNode.sendRequest(new Request(myID, null, RequestType.QUIT));
-//
-//                /* Set the successor of the predecessor node to the newNode*/
-//                Client predNode = new Client(predecessorId * 2);
-//                predNode.sendRequest(new Request(myID, Integer.toString(senderId), RequestType.UPDATE_SUCCESSOR));
-//                predNode.sendRequest(new Request(myID, null, RequestType.QUIT));
-//
-//                Client succNode = new Client(successorId * 2);
-//                succNode.sendRequest(new Request(myID, Integer.toString(senderId), RequestType.UPDATE_PREDECESSOR));
-//                succNode.sendRequest(new Request(myID, null, RequestType.QUIT));
             }
 
-            void updateNeighbour(Request request){
+            void updateNeighbour(Request request) {
                 int newNeighbourId = request.getIntegerFromQuery();
 
                 /* Run when no new node exists*/
-                if(predecessor == null && successor == null){
-                    predecessor = new ChordNeighbour(newNeighbourId * 2);
-                    successor = new ChordNeighbour(newNeighbourId * 2);
+                if (predecessor == null && successor == null) {
+                    predecessor = new ChordNeighbour(newNeighbourId);
+                    successor = new ChordNeighbour(newNeighbourId);
                     return;
                 }
 
                 Request quitRequest = new Request(myID, null, RequestType.QUIT);
                 Log.d(TAG, request.getRequestType() + " " + newNeighbourId +
                         "--" + quitRequest.toString());
-                if(request.getRequestType() == RequestType.UPDATE_PREDECESSOR) {
+                if (request.getRequestType() == RequestType.UPDATE_PREDECESSOR) {
                     predecessor.request(quitRequest);
-                    predecessor = new ChordNeighbour(newNeighbourId * 2);
+                    predecessor = new ChordNeighbour(newNeighbourId);
                 } else {
                     successor.request(quitRequest);
-                    successor = new ChordNeighbour(newNeighbourId * 2);
+                    successor = new ChordNeighbour(newNeighbourId);
                 }
             }
 
@@ -409,6 +401,26 @@ public class SimpleDhtProvider extends ContentProvider {
                     e.printStackTrace();
                 }
             }
+        }
+    }
+
+    private class Client {
+        private final String TAG = "CLIENT";
+        private ObjectInputStream ois;
+        private ObjectOutputStream oos;
+        boolean isConnected;
+
+        Client(int remoteProcessId) throws IOException {
+            /* Establish the connection to server and store it in a Hashmap*/
+            Socket socket = null;
+            isConnected = false;
+            Log.d(TAG, "Attempting connection");
+            socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                    remoteProcessId);
+            Log.d(TAG, "Connected to server");
+            this.oos = new ObjectOutputStream(socket.getOutputStream());
+            this.ois = new ObjectInputStream(socket.getInputStream());
+            isConnected = true;
         }
     }
 }

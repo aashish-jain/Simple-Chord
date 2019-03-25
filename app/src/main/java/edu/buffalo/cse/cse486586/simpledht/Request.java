@@ -1,5 +1,8 @@
 package edu.buffalo.cse.cse486586.simpledht;
 
+import android.util.Log;
+
+import java.awt.font.TextAttribute;
 import java.io.IOException;
 
 enum RequestType {
@@ -13,7 +16,7 @@ public class Request {
     private int senderId;
     String hashedSenderId;
     private RequestType requestType;
-
+    static final String TAG = "REQUEST";
 
     Request(int senderId, String query, RequestType requestType) {
         this.senderId = senderId;
@@ -35,8 +38,10 @@ public class Request {
             this.hashedQuery = strings[2];
             this.senderId = Integer.parseInt(strings[3]);
             this.hashedSenderId = strings[4];
-        } else
+        } else {
+            Log.d(TAG, string + " " + strings.length);
             throw new IOException("Unable to parse the String");
+        }
     }
 
     public RequestType getRequestType() {
