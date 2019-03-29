@@ -32,7 +32,8 @@ public class SimpleDhtProvider extends ContentProvider {
     Client successor, predecessor;
     ArrayList<Integer> chordRing;
     static final int serverId = 5554;
-    static final String DELETE_TAG = "DELETE_TAG", CREATE_TAG = "CREATE_TAG", INSERT_TAG = "INSERT_TAG", QUERY_TAG = "QUERY_TAG";
+    static final String DELETE_TAG = "DELETE_TAG", CREATE_TAG = "CREATE_TAG",
+            INSERT_TAG = "INSERT_TAG", QUERY_TAG = "QUERY_TAG", FETCH_TAG = "FETCH";
 
     static final String[] projection = new String[]{
             KeyValueStorageContract.KeyValueEntry.COLUMN_KEY,
@@ -151,33 +152,35 @@ public class SimpleDhtProvider extends ContentProvider {
         return uri;
     }
 
-    private void fetchNeighbours() {
+    private void fetchNeighboursAndNotify() {
         Request request = new Request(myID, null, RequestType.JOIN);
         Client client = null;
         try {
-            Log.d(CREATE_TAG, "Attempting to join");
-            client = new Client(serverId * 2);
+            client = new Client(serverId);
             client.oos.writeUTF(request.encode());
             client.oos.flush();
-            Log.d(CREATE_TAG, "Joined!. Reading...");
-            int predId = client.ois.readInt(), succId = client.ois.readInt();
+            int predId = client.ois.readInt();
+            int succId = client.ois.readInt();
+            Log.d(FETCH_TAG, "Updated successor and predecessor. " + predId + " " + succId);
+            predecessor = new Client(predId);
+            successor = new Client(succId);
+            Log.d(FETCH_TAG, "Set");
             client.close();
-            Log.d(CREATE_TAG, "Updated successor and predecessor. " + predId + " " + succId);
 
-            /* TODO: Notify the successor and the predecessor nodes*/
-            if (predecessor != null && successor != null) {
-                Log.d(CREATE_TAG, "Disconnecting from existing neighbours");
-//                predecessor.close();
-//                successor.close();
-            }
-            Log.d(CREATE_TAG, "Closed connection. Updating...");
-//            predecessor = new ChordNeighbour(predId);
-//            successor = new ChordNeighbour(succId);
-            Log.d(CREATE_TAG, "Updated");
+//            /* Notify the new predecessor to set its current successor to me */
+//            client = new Client(predId);
+//            request = new Request(myID, null, RequestType.UPDATE_SUCCESSOR);
+//            client.oos.writeUTF(request.encode());
+//            client.oos.flush();
+//            client.close();
+//
+//            /* Notify the new predecessor to set its current successor to me */
+//            request = new Request(myID, null, RequestType.UPDATE_SUCCESSOR);
+//            client.oos.writeUTF(request.encode());
+//            client.oos.flush();
+//            client.close();
         } catch (IOException e) {
-            Log.d("CLIENT", "avd 0 isn't up");
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+            Log.d("CLIENT", "avd 0 may not be up");
         }
     }
 
@@ -197,16 +200,11 @@ public class SimpleDhtProvider extends ContentProvider {
         new Server().start();
 
         /* Because all calls are blocking calls running it on the main thread*/
-//        enableStrictMode();
+        enableStrictMode();
 
-        if (myID != serverId) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    fetchNeighbours();
-                }
-            }).start();
-        } else {
+        if (myID != serverId)
+            fetchNeighboursAndNotify();
+        else {
             chordRing = new ArrayList<Integer>();
             chordRing.add(myID);
         }
@@ -288,10 +286,8 @@ public class SimpleDhtProvider extends ContentProvider {
 
             public ServerThread(Socket socket) {
                 try {
-                    Log.d(TAG, "Attempting to connect to client");
                     this.ois = new ObjectInputStream(socket.getInputStream());
                     this.oos = new ObjectOutputStream(socket.getOutputStream());
-                    Log.d(TAG, "Connected");
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -306,7 +302,7 @@ public class SimpleDhtProvider extends ContentProvider {
                 /* Safe-check to ensure that only 5554 handles the join request*/
                 if (myID != serverId)
                     return;
-                int i = 0;
+
                 /* If no successor or predecessor until now then the new node is
                  * both successor and predecessor */
                 int predecessorId, successorId;
@@ -416,7 +412,7 @@ public class SimpleDhtProvider extends ContentProvider {
             while (true) {
                 try {
                     Socket socket = serverSocket.accept();
-                    Log.d(TAG, "Incoming");
+                    Log.d(TAG, "Incoming connection....");
                     new ServerThread(socket).start();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -439,17 +435,14 @@ public class SimpleDhtProvider extends ContentProvider {
             connectedId = remoteProcessId;
             hashedConnectedId = generateHash(Integer.toString(remoteProcessId));
             isConnected = false;
-            Log.d(TAG, "Attempting connection");
             socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                    remoteProcessId);
-            Log.d(TAG, "Connected to server");
-            this.oos = new ObjectOutputStream(socket.getOutputStream());
-            this.ois = new ObjectInputStream(socket.getInputStream());
-            Log.d(TAG, "Fetched Streams");
+                    remoteProcessId * 2);
+            oos = new ObjectOutputStream(socket.getOutputStream());
+            ois = new ObjectInputStream(socket.getInputStream());
             isConnected = true;
         }
 
-        void close() throws IOException, InterruptedException {
+        void close() throws IOException {
             Request request = new Request(myID, null, RequestType.QUIT);
             oos.writeUTF(request.encode());
             oos.flush();
