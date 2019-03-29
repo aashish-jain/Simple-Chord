@@ -29,7 +29,7 @@ public class SimpleDhtProvider extends ContentProvider {
     static final int selfProcessIdLen = 4;
     int myID;
     String myHashedID;
-    ChordNeighbour successor, predecessor;
+    Client successor, predecessor;
     ArrayList<Integer> chordRing;
     static final int serverId = 5554;
     static final String DELETE_TAG = "DELETE_TAG", CREATE_TAG = "CREATE_TAG", INSERT_TAG = "INSERT_TAG", QUERY_TAG = "QUERY_TAG";
@@ -39,7 +39,7 @@ public class SimpleDhtProvider extends ContentProvider {
             KeyValueStorageContract.KeyValueEntry.COLUMN_VALUE
     };
 
-    public static String genHash(String input) {
+    public static String generateHash(String input) {
         MessageDigest sha1 = null;
         try {
             sha1 = MessageDigest.getInstance("SHA-1");
@@ -73,7 +73,7 @@ public class SimpleDhtProvider extends ContentProvider {
         if (predecessor != null && successor != null) {
             // Hash of key lies in its range then return true else false
             //TODO: fix this condition for 1st node
-            if (key.compareTo(predecessor.getHashedID()) > 0 && key.compareTo(myHashedID) < 0)
+            if (key.compareTo(predecessor.getHashedId()) > 0 && key.compareTo(myHashedID) < 0)
                 return true;
             else
                 return false;
@@ -168,8 +168,8 @@ public class SimpleDhtProvider extends ContentProvider {
             /* TODO: Notify the successor and the predecessor nodes*/
             if(predecessor != null && successor != null) {
                 Log.d(CREATE_TAG, "Disconnecting from existing neighbours");
-                predecessor.close();
-                successor.close();
+//                predecessor.close();
+//                successor.close();
             }
             Log.d(CREATE_TAG, "Closed connection. Updating...");
 //            predecessor = new ChordNeighbour(predId);
@@ -189,7 +189,7 @@ public class SimpleDhtProvider extends ContentProvider {
         successor = null;
         predecessor = null;
 
-        myHashedID = genHash(Integer.toString(myID));
+        myHashedID = generateHash(Integer.toString(myID));
 
         Log.d(CREATE_TAG, "id is " + myID + " " + myHashedID);
 
@@ -314,7 +314,7 @@ public class SimpleDhtProvider extends ContentProvider {
                 String nodeHash = null;
                 Log.d(TAG, "new NODE hash = " + newNodeHash);
                 for (Integer node : chordRing) {
-                    nodeHash = genHash(node.toString());
+                    nodeHash = generateHash(node.toString());
                     Log.d(TAG, "NODE hash = " + nodeHash);
                     if (nodeHash.compareTo(newNodeHash) > 0)
                         break;
@@ -341,28 +341,28 @@ public class SimpleDhtProvider extends ContentProvider {
                 }
             }
 
-            void updateNeighbour(Request request) {
-                int newNeighbourId = request.getSenderId();
-
-                /* Run when no new node exists*/
-                if (predecessor == null && successor == null) {
-                    predecessor = new ChordNeighbour(newNeighbourId);
-                    successor = new ChordNeighbour(newNeighbourId);
-                    return;
-                }
-
-                /* Ask the already connected threads to quit*/
-                Request quitRequest = new Request(myID, null, RequestType.QUIT);
-                if (request.getRequestType() == RequestType.UPDATE_PREDECESSOR) {
-//                    predecessor.request(quitRequest);
-                    predecessor = new ChordNeighbour(newNeighbourId);
-                } else {
-//                    successor.request(quitRequest);
-                    successor = new ChordNeighbour(newNeighbourId);
-                }
-                Log.d(TAG, "QUIT" + request.getRequestType() + " " + newNeighbourId +
-                        "--" + quitRequest.toString());
-            }
+//            void updateNeighbour(Request request) {
+//                int newNeighbourId = request.getSenderId();
+//
+//                /* Run when no new node exists*/
+//                if (predecessor == null && successor == null) {
+//                    predecessor = new ChordNeighbour(newNeighbourId);
+//                    successor = new ChordNeighbour(newNeighbourId);
+//                    return;
+//                }
+//
+//                /* Ask the already connected threads to quit*/
+//                Request quitRequest = new Request(myID, null, RequestType.QUIT);
+//                if (request.getRequestType() == RequestType.UPDATE_PREDECESSOR) {
+////                    predecessor.request(quitRequest);
+//                    predecessor = new ChordNeighbour(newNeighbourId);
+//                } else {
+////                    successor.request(quitRequest);
+//                    successor = new ChordNeighbour(newNeighbourId);
+//                }
+//                Log.d(TAG, "QUIT" + request.getRequestType() + " " + newNeighbourId +
+//                        "--" + quitRequest.toString());
+//            }
 
             @Override
             public void run() {
@@ -390,7 +390,7 @@ public class SimpleDhtProvider extends ContentProvider {
                         case UPDATE_PREDECESSOR:
                         case UPDATE_SUCCESSOR:
                             Log.d(TAG + "UPDATEN" , request.toString());
-                            updateNeighbour(request);
+//                            updateNeighbour(request);
                             break;
                         default:
                             Log.d(TAG, "Unknown Operation. :-/");
@@ -425,13 +425,17 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     private class Client {
-        private final String TAG = "CLIENT";
+        private static final String TAG = "CLIENT";
+        private int connectedId;
+        private String hashedConnectedId;
         private ObjectInputStream ois;
         private ObjectOutputStream oos;
         boolean isConnected;
 
         Client(int remoteProcessId) throws IOException {
             /* Establish the connection to server and store it in a Hashmap*/
+            connectedId = remoteProcessId;
+            hashedConnectedId = generateHash(Integer.toString(remoteProcessId));
             Socket socket = null;
             isConnected = false;
             Log.d(TAG, "Attempting connection");
@@ -442,6 +446,10 @@ public class SimpleDhtProvider extends ContentProvider {
             this.ois = new ObjectInputStream(socket.getInputStream());
             Log.d(TAG, "Fetched Streams");
             isConnected = true;
+        }
+
+        public String getHashedId(){
+            return hashedConnectedId;
         }
     }
 }

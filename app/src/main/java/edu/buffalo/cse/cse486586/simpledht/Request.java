@@ -20,11 +20,11 @@ public class Request {
 
     Request(int senderId, String query, RequestType requestType) {
         this.senderId = senderId;
-        this.hashedSenderId = SimpleDhtProvider.genHash(Integer.toString(senderId));
+        this.hashedSenderId = SimpleDhtProvider.generateHash(Integer.toString(senderId));
         this.query = query;
         this.requestType = requestType;
         if (query != null)
-            this.hashedQuery = SimpleDhtProvider.genHash(query);
+            this.hashedQuery = SimpleDhtProvider.generateHash(query);
         else
             this.hashedQuery = null;
     }
