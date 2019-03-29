@@ -2,7 +2,6 @@ package edu.buffalo.cse.cse486586.simpledht;
 
 import android.util.Log;
 
-import java.awt.font.TextAttribute;
 import java.io.IOException;
 
 enum RequestType {

@@ -161,12 +161,11 @@ public class SimpleDhtProvider extends ContentProvider {
             client.oos.flush();
             Log.d(CREATE_TAG, "Joined!. Reading...");
             int predId = client.ois.readInt(), succId = client.ois.readInt();
-            client.oos.writeUTF(new Request(myID, null, RequestType.QUIT).encode());
-            client.oos.flush();
-            Log.d(CREATE_TAG, "Updated successor and predecessor. "+ predId + " " + succId);
+            client.close();
+            Log.d(CREATE_TAG, "Updated successor and predecessor. " + predId + " " + succId);
 
             /* TODO: Notify the successor and the predecessor nodes*/
-            if(predecessor != null && successor != null) {
+            if (predecessor != null && successor != null) {
                 Log.d(CREATE_TAG, "Disconnecting from existing neighbours");
 //                predecessor.close();
 //                successor.close();
@@ -177,6 +176,8 @@ public class SimpleDhtProvider extends ContentProvider {
             Log.d(CREATE_TAG, "Updated");
         } catch (IOException e) {
             Log.d("CLIENT", "avd 0 isn't up");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
     }
 
@@ -335,7 +336,7 @@ public class SimpleDhtProvider extends ContentProvider {
                     oos.writeInt(predecessorId);
                     oos.writeInt(successorId);
                     oos.flush();
-                    Log.d(TAG, "Flushed to "+ senderId);
+                    Log.d(TAG, "Flushed to " + senderId);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -389,7 +390,7 @@ public class SimpleDhtProvider extends ContentProvider {
                             break;
                         case UPDATE_PREDECESSOR:
                         case UPDATE_SUCCESSOR:
-                            Log.d(TAG + "UPDATEN" , request.toString());
+                            Log.d(TAG + "UPDATEN", request.toString());
 //                            updateNeighbour(request);
                             break;
                         default:
@@ -428,6 +429,7 @@ public class SimpleDhtProvider extends ContentProvider {
         private static final String TAG = "CLIENT";
         private int connectedId;
         private String hashedConnectedId;
+        private Socket socket;
         private ObjectInputStream ois;
         private ObjectOutputStream oos;
         boolean isConnected;
@@ -436,7 +438,6 @@ public class SimpleDhtProvider extends ContentProvider {
             /* Establish the connection to server and store it in a Hashmap*/
             connectedId = remoteProcessId;
             hashedConnectedId = generateHash(Integer.toString(remoteProcessId));
-            Socket socket = null;
             isConnected = false;
             Log.d(TAG, "Attempting connection");
             socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
@@ -448,7 +449,16 @@ public class SimpleDhtProvider extends ContentProvider {
             isConnected = true;
         }
 
-        public String getHashedId(){
+        void close() throws IOException, InterruptedException {
+            Request request = new Request(myID, null, RequestType.QUIT);
+            oos.writeUTF(request.encode());
+            oos.flush();
+            oos.close();
+            ois.close();
+            socket.close();
+        }
+
+        public String getHashedId() {
             return hashedConnectedId;
         }
     }
