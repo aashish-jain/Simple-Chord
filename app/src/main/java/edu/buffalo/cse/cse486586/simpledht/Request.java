@@ -11,19 +11,19 @@ enum RequestType {
 public class Request {
     private static final String seperator = "<sep>", separator = " ";
     private String hashedQuery;
-    private String query;
+    private String valueString;
     private int senderId;
     String hashedSenderId;
     private RequestType requestType;
     static final String TAG = "REQUEST";
 
-    Request(int senderId, String query, RequestType requestType) {
+    Request(int senderId, String valueString, RequestType requestType) {
         this.senderId = senderId;
         this.hashedSenderId = SimpleDhtProvider.generateHash(Integer.toString(senderId));
-        this.query = query;
+        this.valueString = valueString;
         this.requestType = requestType;
-        if (query != null)
-            this.hashedQuery = SimpleDhtProvider.generateHash(query);
+        if (valueString != null)
+            this.hashedQuery = SimpleDhtProvider.generateHash(valueString);
         else
             this.hashedQuery = null;
     }
@@ -32,7 +32,7 @@ public class Request {
     Request(String string) throws IOException {
         String[] strings = string.split(this.seperator);
         if (strings.length == 5) {
-            this.query = strings[0];
+            this.valueString = strings[0];
             this.requestType = RequestType.valueOf(strings[1]);
             this.hashedQuery = strings[2];
             this.senderId = Integer.parseInt(strings[3]);
@@ -47,8 +47,8 @@ public class Request {
         return requestType;
     }
 
-    public String getQuery(){
-        return query;
+    public String getValueString(){
+        return valueString;
     }
 
 
@@ -61,17 +61,17 @@ public class Request {
     }
 
     public int getIntegerFromQuery(){
-        return Integer.parseInt(query);
+        return Integer.parseInt(valueString);
     }
 
     @Override
     public String toString() {
-        return query + separator + requestType + separator + hashedQuery + separator +
+        return valueString + separator + requestType + separator + hashedQuery + separator +
                 senderId + separator + hashedSenderId;
     }
 
     public String encode() {
-        return query + seperator + requestType + seperator + hashedQuery + seperator +
+        return valueString + seperator + requestType + seperator + hashedQuery + seperator +
                 senderId + seperator + hashedSenderId;
     }
 }

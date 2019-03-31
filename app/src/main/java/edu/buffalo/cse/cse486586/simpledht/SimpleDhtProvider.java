@@ -88,25 +88,27 @@ public class SimpleDhtProvider extends ContentProvider {
 
     private boolean belongsToMe(String keyHash) {
         // If has neighbours
-        if (predecessor != null && successor != null) {
+        boolean toReturn = false;
+        if (predecessor == null && successor == null)
+            toReturn = true;
+        else {
             // Hash of key lies in its range then return true else false
             //TODO: fix this condition for 1st node
             String predecessorHash = predecessor.getHashedId();
-            String successorHash = successor.getHashedId();
 
             /* Other Node - check if in hashspace */
             if (keyHash.compareTo(predecessorHash) > 0 && keyHash.compareTo(myHash) < 0)
-                return true;
+                toReturn = true;
             /* First Node - check if in hashspace */
             else if (myHash.compareTo(predecessorHash) < 0 &&
                     (keyHash.compareTo(predecessorHash) > 0 || keyHash.compareTo(myHash) < 0))
-                return true;
+                toReturn = true;
+            /* Other node's hashspace */
             else
-                return false;
+                toReturn = false;
+            Log.d("HASHRANGE", "(" + predecessorHash + "," + myHash + "] +>" + keyHash + toReturn);
         }
-        //else return true
-        else
-            return true;
+        return toReturn;
     }
 
     public int deleteSingle(String key) {
@@ -138,12 +140,12 @@ public class SimpleDhtProvider extends ContentProvider {
 
         /* https://stackoverflow.com/questions/7510219/deleting-row-in-sqlite-in-android */
         int deleted;
-        if (belongsToMe(selection))
-            deleted = deleteSingle(selection);
-        else if (selection.equals("@"))
+        if (selection.equals("@"))
             deleted = deleteAllLocal();
         else if (selection.equals("*"))
             deleted = deleteAll();
+        else if (belongsToMe(selection))
+            deleted = deleteSingle(selection);
         else
             deleted = deleteFromDHT(selection);
         Log.d(DELETE_TAG, "Removed " + deleted + " messages");
@@ -160,10 +162,14 @@ public class SimpleDhtProvider extends ContentProvider {
                 null, values, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
-    public long insertInDHT(ContentValues values) {
-//        Log.d(INSERT_TAG, "Not yet implemented");
-//        return 0;
-        return insertLocal(values);
+    public void insertInDHT(ContentValues values) throws IOException {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append(values.get("key"));
+        stringBuilder.append(",");
+        stringBuilder.append(values.get("value"));
+        String valueString = stringBuilder.toString();
+        successor.oos.writeUTF(new Request(myID, valueString, RequestType.INSERT).encode());
+        successor.oos.flush();
     }
 
     @Override
@@ -172,7 +178,12 @@ public class SimpleDhtProvider extends ContentProvider {
         if (belongsToMe(values.getAsString("key")))
             insertLocal(values);
         else
-            insertInDHT(values);
+            try {
+                throw new IOException("df");
+//                insertInDHT(values);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         return uri;
     }
 
@@ -377,11 +388,13 @@ public class SimpleDhtProvider extends ContentProvider {
                     if (request.getRequestType() == RequestType.UPDATE_PREDECESSOR) {
                         predecessor.close();
                         predecessor = new Client(newNeighbourId);
+                        Log.d(TAG, "My new predecessor is " + newNeighbourId + " and hash" +
+                                "range is ("+ predecessor.getHashedId() + "," + myHash + "]");
                     } else {
                         successor.close();
                         successor = new Client(newNeighbourId);
+                        Log.d(TAG, "My new successor is " + newNeighbourId);
                     }
-                    Log.d(TAG, "Latest " + request.getRequestType() + " is " + newNeighbourId);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -411,6 +424,7 @@ public class SimpleDhtProvider extends ContentProvider {
                         case QUERY:
                             break;
                         case INSERT:
+                            Log.d(INSERT_TAG, request.toString());
                             break;
                         case DELETE:
                             break;
