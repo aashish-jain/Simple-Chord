@@ -371,30 +371,56 @@ public class SimpleDhtProvider extends ContentProvider {
                 Log.d(TAG, "Flushed to " + senderId);
             }
 
-            void updateNeighbour(Request request) {
+            void insertHandler(Request request) throws IOException {
+                Log.d(INSERT_TAG, request.toString());
+                if(belongsToMe(request.getKey())) {
+                    ContentValues values = new ContentValues();
+                    values.put("key", request.getKey());
+                    values.put("value" , request.getValue());
+                    insertLocal(values);
+                    Log.d(TAG, "Will insert here - " + request.toString());
+                }
+                else {
+                    successor.oos.writeUTF(request.toString());
+                    successor.oos.flush();
+                }
+            }
+
+            private void deleteHandler(Request request) throws IOException {
+                Log.d(DELETE_TAG, request.toString());
+                String key = request.getKey();
+                if(belongsToMe(key)) {
+                    deleteSingle(key);
+                    Log.d(TAG, "Will delete here - " + request.toString());
+                }
+                else {
+                    successor.oos.writeUTF(request.toString());
+                    successor.oos.flush();
+                }
+
+            }
+
+
+            void updateNeighbour(Request request) throws IOException {
                 int newNeighbourId = request.getSenderId();
 
-                try {
-                    /* Run when no new node exists only for avd 0*/
-                    if (predecessor == null && successor == null) {
-                        predecessor = new Client(newNeighbourId);
-                        successor = new Client(newNeighbourId);
-                        return;
-                    }
+                /* Run when no new node exists only for avd 0*/
+                if (predecessor == null && successor == null) {
+                    predecessor = new Client(newNeighbourId);
+                    successor = new Client(newNeighbourId);
+                    return;
+                }
 
-                    /* Ask the already connected threads to quit*/
-                    if (request.getRequestType() == RequestType.UPDATE_PREDECESSOR) {
-                        predecessor.close();
-                        predecessor = new Client(newNeighbourId);
-                        Log.d(TAG, "My new predecessor is " + newNeighbourId + " and hash" +
-                                "range is ("+ predecessor.getHashedId() + "," + myHash + "]");
-                    } else {
-                        successor.close();
-                        successor = new Client(newNeighbourId);
-                        Log.d(TAG, "My new successor is " + newNeighbourId);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
+                /* Ask the already connected threads to quit*/
+                if (request.getRequestType() == RequestType.UPDATE_PREDECESSOR) {
+                    predecessor.close();
+                    predecessor = new Client(newNeighbourId);
+                    Log.d(TAG, "My new predecessor is " + newNeighbourId + " and hash" +
+                            "range is ("+ predecessor.getHashedId() + "," + myHash + "]");
+                } else {
+                    successor.close();
+                    successor = new Client(newNeighbourId);
+                    Log.d(TAG, "My new successor is " + newNeighbourId);
                 }
             }
 
@@ -408,50 +434,37 @@ public class SimpleDhtProvider extends ContentProvider {
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
-                    switch (request.getRequestType()) {
-                        case JOIN:
-                            try {
+                    try {
+                        switch (request.getRequestType()) {
+                            case JOIN:
                                 respondToJoinRequest(request);
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                            break;
-                        case QUIT:
-                            Log.d(TAG, "Thread dying :-|");
-                            return;
-                        case QUERY:
-                            break;
-                        case INSERT:
-                            Log.d(INSERT_TAG, "Recived " + request.toString());
-                            if(belongsToMe(request.getKey())) {
-                                ContentValues values = new ContentValues();
-                                values.put("key", request.getKey());
-                                values.put("value" , request.getValue());
-                                insertLocal(values);
-                                Log.d(TAG, "Will insert here - " + request.toString());
-                            }
-                            else {
-                                try {
-                                    successor.oos.writeUTF(request.toString());
-                                    successor.oos.flush();
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                            break;
-                        case DELETE:
-                            break;
-                        case UPDATE_PREDECESSOR:
-                        case UPDATE_SUCCESSOR:
-                            updateNeighbour(request);
-                            break;
-                        default:
-                            Log.d(TAG, "Unknown Operation. :-/");
-                            return;
+                                break;
+                            case QUIT:
+                                Log.d(TAG, "Thread dying :-|");
+                                return;
+                            case QUERY:
+                                break;
+                            case INSERT:
+                                insertHandler(request);
+                                break;
+                            case DELETE:
+                                deleteHandler(request);
+                                break;
+                            case UPDATE_PREDECESSOR:
+                            case UPDATE_SUCCESSOR:
+                                updateNeighbour(request);
+                                break;
+                            default:
+                                Log.d(TAG, "Unknown Operation. :-/");
+                                return;
 
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
                 }
             }
+
         }
 
         public void run() {
