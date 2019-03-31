@@ -19,8 +19,9 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.Formatter;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class SimpleDhtProvider extends ContentProvider {
     /* https://developer.android.com/training/data-storage/sqlite */
@@ -30,8 +31,8 @@ public class SimpleDhtProvider extends ContentProvider {
     int myID;
     String myHashedID;
     Client successor, predecessor;
-    ArrayList<Integer> chordRing;
     static final int serverId = 5554;
+    TreeMap<String, Client> chordRingMap;
     static final String DELETE_TAG = "DELETE_TAG", CREATE_TAG = "CREATE_TAG",
             INSERT_TAG = "INSERT_TAG", QUERY_TAG = "QUERY_TAG", FETCH_TAG = "FETCH";
 
@@ -39,6 +40,7 @@ public class SimpleDhtProvider extends ContentProvider {
             KeyValueStorageContract.KeyValueEntry.COLUMN_KEY,
             KeyValueStorageContract.KeyValueEntry.COLUMN_VALUE
     };
+
 
     public static String generateHash(String input) {
         MessageDigest sha1 = null;
@@ -130,7 +132,6 @@ public class SimpleDhtProvider extends ContentProvider {
         return null;
     }
 
-
     public long insertLocal(ContentValues values) {
         return dbWriter.insertWithOnConflict(KeyValueStorageContract.KeyValueEntry.TABLE_NAME,
                 null, values, SQLiteDatabase.CONFLICT_REPLACE);
@@ -152,7 +153,7 @@ public class SimpleDhtProvider extends ContentProvider {
         return uri;
     }
 
-    private void fetchNeighboursAndNotify() {
+    private void fetchNeighbours() {
         Request request = new Request(myID, null, RequestType.JOIN);
         Client client = null;
         try {
@@ -166,19 +167,6 @@ public class SimpleDhtProvider extends ContentProvider {
             successor = new Client(succId);
             Log.d(FETCH_TAG, "Set");
             client.close();
-
-//            /* Notify the new predecessor to set its current successor to me */
-//            client = new Client(predId);
-//            request = new Request(myID, null, RequestType.UPDATE_SUCCESSOR);
-//            client.oos.writeUTF(request.encode());
-//            client.oos.flush();
-//            client.close();
-//
-//            /* Notify the new predecessor to set its current successor to me */
-//            request = new Request(myID, null, RequestType.UPDATE_SUCCESSOR);
-//            client.oos.writeUTF(request.encode());
-//            client.oos.flush();
-//            client.close();
         } catch (IOException e) {
             Log.d("CLIENT", "avd 0 may not be up");
         }
@@ -199,14 +187,30 @@ public class SimpleDhtProvider extends ContentProvider {
 
         new Server().start();
 
+        /* Small delay to ensure that the server of the node starts
+         * This is to ensure that the AVD0's server is up and
+         * it can connect to it
+         * */
+        try {
+            Thread.sleep(200);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
         /* Because all calls are blocking calls running it on the main thread*/
         enableStrictMode();
 
+        /* If not server ask the server for new Nodes*/
         if (myID != serverId)
-            fetchNeighboursAndNotify();
+            fetchNeighbours();
+        /* Else just send them */
         else {
-            chordRing = new ArrayList<Integer>();
-            chordRing.add(myID);
+            chordRingMap = new TreeMap<String, Client>();
+            try {
+                chordRingMap.put(generateHash(Integer.toString(myID)), new Client(myID));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
         return true;
     }
@@ -283,7 +287,6 @@ public class SimpleDhtProvider extends ContentProvider {
 
             static final String TAG = "SERVER_THREAD";
 
-
             public ServerThread(Socket socket) {
                 try {
                     this.ois = new ObjectInputStream(socket.getInputStream());
@@ -293,9 +296,9 @@ public class SimpleDhtProvider extends ContentProvider {
                 }
             }
 
-            public synchronized void respondToJoinRequest(Request request) {
+            public synchronized void respondToJoinRequest(Request request) throws IOException {
                 int senderId = request.getSenderId();
-                String newNodeHash = request.getHashedSenderId();
+                String senderHash = request.getHashedSenderId();
 
                 Log.d(TAG, "Recieved Join request from " + senderId);
                 Log.d(TAG, "Message =  " + request.toString());
@@ -303,63 +306,55 @@ public class SimpleDhtProvider extends ContentProvider {
                 if (myID != serverId)
                     return;
 
-                /* If no successor or predecessor until now then the new node is
-                 * both successor and predecessor */
-                int predecessorId, successorId;
+                Map.Entry<String, Client> predecessorInRing, successorInRing;
+                chordRingMap.put(senderHash, new Client(senderId));
+                Log.d(TAG, "Chord ring size is now " + chordRingMap.size());
 
-                int indexToInsert = 0;
-                String nodeHash = null;
-                Log.d(TAG, "new NODE hash = " + newNodeHash);
-                for (Integer node : chordRing) {
-                    nodeHash = generateHash(node.toString());
-                    Log.d(TAG, "NODE hash = " + nodeHash);
-                    if (nodeHash.compareTo(newNodeHash) > 0)
-                        break;
-                    indexToInsert++;
-                }
-                Log.d(TAG, "Got indexToInsert " + indexToInsert);
-                chordRing.add(indexToInsert, senderId);
-                Log.d(TAG, "Chord ring size is now " + chordRing.size());
+                predecessorInRing = chordRingMap.lowerEntry(senderHash);
+                successorInRing = chordRingMap.higherEntry(senderHash);
+
                 //Enforce the neighbours
-                successorId = (indexToInsert == chordRing.size() - 1) ?
-                        chordRing.get(0) : chordRing.get(indexToInsert + 1);
-                predecessorId = (indexToInsert == 0) ?
-                        chordRing.get(chordRing.size() - 1) : chordRing.get(indexToInsert - 1);
+                int successorId = (successorInRing == null) ?
+                        chordRingMap.firstEntry().getValue().getConnectedId() :
+                        successorInRing.getValue().getConnectedId();
+                int predecessorId = (predecessorInRing == null) ?
+                        chordRingMap.lastEntry().getValue().getConnectedId() :
+                        predecessorInRing.getValue().getConnectedId();
                 Log.d(TAG, senderId + " Got predId = " + predecessorId + " succId = " + successorId);
 
                 /* Sends back the successor and predecessor to the requesting node*/
+                oos.writeInt(predecessorId);
+                oos.writeInt(successorId);
+                oos.flush();
+                Log.d(TAG, "Flushed to " + senderId);
+
+
+            }
+
+            void updateNeighbour(Request request) {
+                int newNeighbourId = request.getSenderId();
+
                 try {
-                    oos.writeInt(predecessorId);
-                    oos.writeInt(successorId);
-                    oos.flush();
-                    Log.d(TAG, "Flushed to " + senderId);
+                    /* Run when no new node exists only for avd 0*/
+                    if (predecessor == null && successor == null) {
+                        predecessor = new Client(newNeighbourId);
+                        successor = new Client(newNeighbourId);
+                        return;
+                    }
+
+                    /* Ask the already connected threads to quit*/
+                    if (request.getRequestType() == RequestType.UPDATE_PREDECESSOR) {
+                        predecessor.close();
+                        predecessor = new Client(newNeighbourId);
+                    } else {
+                        successor.close();
+                        successor = new Client(newNeighbourId);
+                    }
+                    Log.d(TAG, "Latest" + request.getRequestType() + "is" + newNeighbourId);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
-
-//            void updateNeighbour(Request request) {
-//                int newNeighbourId = request.getSenderId();
-//
-//                /* Run when no new node exists*/
-//                if (predecessor == null && successor == null) {
-//                    predecessor = new ChordNeighbour(newNeighbourId);
-//                    successor = new ChordNeighbour(newNeighbourId);
-//                    return;
-//                }
-//
-//                /* Ask the already connected threads to quit*/
-//                Request quitRequest = new Request(myID, null, RequestType.QUIT);
-//                if (request.getRequestType() == RequestType.UPDATE_PREDECESSOR) {
-////                    predecessor.request(quitRequest);
-//                    predecessor = new ChordNeighbour(newNeighbourId);
-//                } else {
-////                    successor.request(quitRequest);
-//                    successor = new ChordNeighbour(newNeighbourId);
-//                }
-//                Log.d(TAG, "QUIT" + request.getRequestType() + " " + newNeighbourId +
-//                        "--" + quitRequest.toString());
-//            }
 
             @Override
             public void run() {
@@ -373,7 +368,11 @@ public class SimpleDhtProvider extends ContentProvider {
                     }
                     switch (request.getRequestType()) {
                         case JOIN:
-                            respondToJoinRequest(request);
+                            try {
+                                respondToJoinRequest(request);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
                             break;
                         case QUIT:
                             Log.d(TAG, "Dying");
@@ -387,7 +386,7 @@ public class SimpleDhtProvider extends ContentProvider {
                         case UPDATE_PREDECESSOR:
                         case UPDATE_SUCCESSOR:
                             Log.d(TAG + "UPDATEN", request.toString());
-//                            updateNeighbour(request);
+                            updateNeighbour(request);
                             break;
                         default:
                             Log.d(TAG, "Unknown Operation. :-/");
@@ -453,6 +452,10 @@ public class SimpleDhtProvider extends ContentProvider {
 
         public String getHashedId() {
             return hashedConnectedId;
+        }
+
+        public int getConnectedId() {
+            return connectedId;
         }
     }
 }
