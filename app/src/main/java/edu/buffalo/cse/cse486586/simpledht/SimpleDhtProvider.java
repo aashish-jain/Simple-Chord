@@ -100,11 +100,11 @@ public class SimpleDhtProvider extends ContentProvider {
             /* Other Node - check if in hashspace */
             if (keyHash.compareTo(predecessorHash) > 0 && keyHash.compareTo(myHash) < 0)
                 toReturn = true;
-            /* First Node - check if in hashspace */
+                /* First Node - check if in hashspace */
             else if (myHash.compareTo(predecessorHash) < 0 &&
                     (keyHash.compareTo(predecessorHash) > 0 || keyHash.compareTo(myHash) < 0))
                 toReturn = true;
-            /* Other node's hashspace */
+                /* Other node's hashspace */
             else
                 toReturn = false;
             Log.d("HASHRANGE", "(" + predecessorHash + "," + myHash + "] +>" + keyHash +
@@ -165,7 +165,7 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     public void insertInDHT(ContentValues values) throws IOException {
-        String key = values.getAsString("key") , value = values.getAsString("value");
+        String key = values.getAsString("key"), value = values.getAsString("value");
         successor.oos.writeUTF(new Request(myID, key, value, RequestType.INSERT).toString());
         successor.oos.flush();
     }
@@ -373,14 +373,13 @@ public class SimpleDhtProvider extends ContentProvider {
 
             void insertHandler(Request request) throws IOException {
                 Log.d(INSERT_TAG, request.toString());
-                if(belongsToMe(request.getKey())) {
+                if (belongsToMe(request.getKey())) {
                     ContentValues values = new ContentValues();
                     values.put("key", request.getKey());
-                    values.put("value" , request.getValue());
+                    values.put("value", request.getValue());
                     insertLocal(values);
                     Log.d(TAG, "Will insert here - " + request.toString());
-                }
-                else {
+                } else {
                     successor.oos.writeUTF(request.toString());
                     successor.oos.flush();
                 }
@@ -389,17 +388,14 @@ public class SimpleDhtProvider extends ContentProvider {
             private void deleteHandler(Request request) throws IOException {
                 Log.d(DELETE_TAG, request.toString());
                 String key = request.getKey();
-                if(belongsToMe(key)) {
+                if (belongsToMe(key)) {
                     deleteSingle(key);
                     Log.d(TAG, "Will delete here - " + request.toString());
-                }
-                else {
+                } else {
                     successor.oos.writeUTF(request.toString());
                     successor.oos.flush();
                 }
-
             }
-
 
             void updateNeighbour(Request request) throws IOException {
                 int newNeighbourId = request.getSenderId();
@@ -416,7 +412,7 @@ public class SimpleDhtProvider extends ContentProvider {
                     predecessor.close();
                     predecessor = new Client(newNeighbourId);
                     Log.d(TAG, "My new predecessor is " + newNeighbourId + " and hash" +
-                            "range is ("+ predecessor.getHashedId() + "," + myHash + "]");
+                            "range is (" + predecessor.getHashedId() + "," + myHash + "]");
                 } else {
                     successor.close();
                     successor = new Client(newNeighbourId);
@@ -455,9 +451,8 @@ public class SimpleDhtProvider extends ContentProvider {
                                 updateNeighbour(request);
                                 break;
                             default:
-                                Log.d(TAG, "Unknown Operation. :-/");
+                                Log.d(TAG, "Unknown Operation. :-?");
                                 return;
-
                         }
                     } catch (IOException e) {
                         e.printStackTrace();
