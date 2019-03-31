@@ -316,7 +316,6 @@ public class SimpleDhtProvider extends ContentProvider {
                 String senderHash = request.getHashedSenderId();
 
                 Log.d(TAG, "Recieved Join request from " + senderId);
-                Log.d(TAG, "Message =  " + request.toString());
                 /* Safe-check to ensure that only 5554 handles the join request*/
                 if (myID != serverId)
                     return;
@@ -344,8 +343,14 @@ public class SimpleDhtProvider extends ContentProvider {
                 oos.flush();
 
                 /* Ask the neighbours to consider the new node as successor or predecessor */
-//                predecessorInRing.getValue().oos.writeUTF(new Request(successorId, null, RequestType.UPDATE_SUCCESSOR).encode());
-//                successorInRing.getValue().oos.writeUTF(new Request(successorId, null, RequestType.UPDATE_PREDECESSOR).encode());
+                Client client = predecessorInRing.getValue();
+                client.oos.writeUTF(new Request(senderId, null, RequestType.UPDATE_SUCCESSOR).encode());
+                client.oos.flush();
+
+                client = successorInRing.getValue();
+                client.oos.writeUTF(new Request(senderId, null, RequestType.UPDATE_PREDECESSOR).encode());
+                client.oos.flush();
+
                 Log.d(TAG, "Flushed to " + senderId);
             }
 
@@ -368,7 +373,7 @@ public class SimpleDhtProvider extends ContentProvider {
                         successor.close();
                         successor = new Client(newNeighbourId);
                     }
-                    Log.d(TAG, "Latest" + request.getRequestType() + "is" + newNeighbourId);
+                    Log.d(TAG, "Latest " + request.getRequestType() + " is " + newNeighbourId);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -403,7 +408,6 @@ public class SimpleDhtProvider extends ContentProvider {
                             break;
                         case UPDATE_PREDECESSOR:
                         case UPDATE_SUCCESSOR:
-                            Log.d(TAG + "UPDATEN", request.toString());
                             updateNeighbour(request);
                             break;
                         default:
