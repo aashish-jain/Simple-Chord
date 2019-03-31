@@ -5,6 +5,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
+import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.StrictMode;
@@ -74,6 +75,39 @@ public class SimpleDhtProvider extends ContentProvider {
     public static void enableStrictMode() {
         StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
         StrictMode.setThreadPolicy(policy);
+    }
+
+    /* https://stackoverflow.com/questions/3105080/output-values-found-in-cursor-to-logcat-android */
+    private static String cursorToString(Cursor cursor) {
+        StringBuilder stringBuilder = new StringBuilder();
+        int cursorCount = 1;
+        if (cursor.moveToFirst()) {
+            do {
+                int columnsQty = cursor.getColumnCount();
+                for (int idx = 0; idx < columnsQty; ++idx) {
+                    stringBuilder.append(cursor.getString(idx));
+                    if (idx < columnsQty - 1)
+                        stringBuilder.append(",");
+                }
+                if (cursorCount < cursor.getCount())
+                    stringBuilder.append("\n");
+                cursorCount++;
+            } while (cursor.moveToNext());
+        }
+        return stringBuilder.toString();
+    }
+
+    private static Cursor cursorFromString(String queryResult) {
+        MatrixCursor matrixCursor = new MatrixCursor(new String[]{"key", "value"});
+        String key, value;
+        String[] splitValues;
+        for (String row : queryResult.split("\n")) {
+            splitValues = row.split(",");
+            key = splitValues[0];
+            value = splitValues[1];
+            matrixCursor.addRow(new String[]{key, value});
+        }
+        return matrixCursor;
     }
 
     private int getProcessId() {
@@ -255,9 +289,18 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     public Cursor queryAll() {
-//        Log.d(QUERY_TAG, "Not yet implemented");
-//        return null;
-        return queryAllLocal();
+        Cursor cursor = null;
+        if (predecessor == null && successor == null)
+            cursor = queryAllLocal();
+        else {
+            try {
+                throw new IOException("WHAT ?");
+//                cursor = queryInDHT("*");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return cursor;
     }
 
     public Cursor querySingle(String key) {
@@ -276,9 +319,15 @@ public class SimpleDhtProvider extends ContentProvider {
         );
     }
 
-    public Cursor queryInDHT(String key) {
-        return querySingle(key);
+    public Cursor queryInDHT(String key) throws IOException {
+        Request request = new Request(myID, key, null, RequestType.QUERY);
+        successor.oos.writeUTF(request.toString());
+        successor.oos.flush();
+        String queryResult = successor.ois.readUTF();
+        Cursor cursor = cursorFromString(queryResult);
+        return cursor;
     }
+
 
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
@@ -294,12 +343,18 @@ public class SimpleDhtProvider extends ContentProvider {
             cursor = queryAllLocal();
         else if (belongsToMe(selection))
             cursor = querySingle(selection);
-        else
-            cursor = queryInDHT(selection);
+        else {
+            try {
+                throw new IOException("What?");
+//                cursor = queryInDHT(selection);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
         if (cursor.getCount() == 0)
             Log.d(QUERY_TAG, selection + " not found :-(");
         else
-            Log.d(QUERY_TAG, " Found = " + cursor.getCount() + " " + DatabaseUtils.dumpCursorToString(cursor));
+            Log.d(QUERY_TAG, " Found = " + cursor.getCount() + "\n" + cursorToString(cursor));
         return cursor;
     }
 
@@ -385,7 +440,24 @@ public class SimpleDhtProvider extends ContentProvider {
                 }
             }
 
-            private void deleteHandler(Request request) throws IOException {
+            void queryHandler(Request request) throws IOException {
+                Log.d(QUERY_TAG, request.toString());
+                String key = request.getKey();
+                String toReturn;
+                if (belongsToMe(key)) {
+                    Cursor cursor = querySingle(key);
+                    toReturn = cursorToString(cursor);
+                } else {
+                    successor.oos.writeUTF(request.toString());
+                    successor.oos.flush();
+                    toReturn = successor.ois.readUTF();
+                }
+                Log.d(QUERY_TAG, toReturn);
+                predecessor.oos.writeUTF(toReturn);
+                predecessor.oos.flush();
+            }
+
+            void deleteHandler(Request request) throws IOException {
                 Log.d(DELETE_TAG, request.toString());
                 String key = request.getKey();
                 if (belongsToMe(key)) {
@@ -439,6 +511,7 @@ public class SimpleDhtProvider extends ContentProvider {
                                 Log.d(TAG, "Thread dying :-|");
                                 return;
                             case QUERY:
+                                queryHandler(request);
                                 break;
                             case INSERT:
                                 insertHandler(request);
