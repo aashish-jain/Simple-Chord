@@ -86,7 +86,8 @@ public class SimpleDhtProvider extends ContentProvider {
         return id;
     }
 
-    private boolean belongsToMe(String keyHash) {
+    private boolean belongsToMe(String key) {
+        String keyHash = generateHash(key);
         // If has neighbours
         boolean toReturn = false;
         if (predecessor == null && successor == null)
@@ -106,7 +107,8 @@ public class SimpleDhtProvider extends ContentProvider {
             /* Other node's hashspace */
             else
                 toReturn = false;
-            Log.d("HASHRANGE", "(" + predecessorHash + "," + myHash + "] +>" + keyHash + toReturn);
+            Log.d("HASHRANGE", "(" + predecessorHash + "," + myHash + "] +>" + keyHash +
+                    " " + toReturn);
         }
         return toReturn;
     }
@@ -163,24 +165,20 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     public void insertInDHT(ContentValues values) throws IOException {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append(values.get("key"));
-        stringBuilder.append(",");
-        stringBuilder.append(values.get("value"));
-        String valueString = stringBuilder.toString();
-        successor.oos.writeUTF(new Request(myID, valueString, RequestType.INSERT).encode());
+        String key = values.getAsString("key") , value = values.getAsString("value");
+        successor.oos.writeUTF(new Request(myID, key, value, RequestType.INSERT).toString());
         successor.oos.flush();
     }
 
     @Override
     public Uri insert(Uri uri, ContentValues values) {
         Log.d(INSERT_TAG, values.toString());
-        if (belongsToMe(values.getAsString("key")))
+        String key = values.getAsString("key");
+        if (belongsToMe(key))
             insertLocal(values);
         else
             try {
-                throw new IOException("df");
-//                insertInDHT(values);
+                insertInDHT(values);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -188,11 +186,11 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     private void fetchNeighbours() {
-        Request request = new Request(myID, null, RequestType.JOIN);
+        Request request = new Request(myID, RequestType.JOIN);
         Client client = null;
         try {
             client = new Client(serverId);
-            client.oos.writeUTF(request.encode());
+            client.oos.writeUTF(request.toString());
             client.oos.flush();
             int predId = client.ois.readInt();
             int succId = client.ois.readInt();
@@ -363,11 +361,11 @@ public class SimpleDhtProvider extends ContentProvider {
 
                 /* Ask the neighbours to consider the new node as successor or predecessor */
                 Client client = predecessorInRing.getValue();
-                client.oos.writeUTF(new Request(senderId, null, RequestType.UPDATE_SUCCESSOR).encode());
+                client.oos.writeUTF(new Request(senderId, RequestType.UPDATE_SUCCESSOR).toString());
                 client.oos.flush();
 
                 client = successorInRing.getValue();
-                client.oos.writeUTF(new Request(senderId, null, RequestType.UPDATE_PREDECESSOR).encode());
+                client.oos.writeUTF(new Request(senderId, RequestType.UPDATE_PREDECESSOR).toString());
                 client.oos.flush();
 
                 Log.d(TAG, "Flushed to " + senderId);
@@ -424,7 +422,22 @@ public class SimpleDhtProvider extends ContentProvider {
                         case QUERY:
                             break;
                         case INSERT:
-                            Log.d(INSERT_TAG, request.toString());
+                            Log.d(INSERT_TAG, "Recived " + request.toString());
+                            if(belongsToMe(request.getKey())) {
+                                ContentValues values = new ContentValues();
+                                values.put("key", request.getKey());
+                                values.put("value" , request.getValue());
+                                insertLocal(values);
+                                Log.d(TAG, "Will insert here - " + request.toString());
+                            }
+                            else {
+                                try {
+                                    successor.oos.writeUTF(request.toString());
+                                    successor.oos.flush();
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            }
                             break;
                         case DELETE:
                             break;
@@ -486,8 +499,8 @@ public class SimpleDhtProvider extends ContentProvider {
         }
 
         void close() throws IOException {
-            Request request = new Request(myID, null, RequestType.QUIT);
-            oos.writeUTF(request.encode());
+            Request request = new Request(myID, RequestType.QUIT);
+            oos.writeUTF(request.toString());
             oos.flush();
             oos.close();
             ois.close();

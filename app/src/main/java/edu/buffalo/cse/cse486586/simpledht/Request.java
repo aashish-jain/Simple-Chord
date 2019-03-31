@@ -9,34 +9,39 @@ enum RequestType {
 }
 
 public class Request {
-    private static final String seperator = "<sep>", separator = " ";
-    private String hashedQuery;
-    private String valueString;
-    private int senderId;
-    String hashedSenderId;
-    private RequestType requestType;
     static final String TAG = "REQUEST";
+    private static final String seperator = ",";
 
-    Request(int senderId, String valueString, RequestType requestType) {
+    private int senderId;
+    private String hashedSenderId;
+    private RequestType requestType;
+    private String key, value;
+
+    Request(int senderId, RequestType requestType) {
         this.senderId = senderId;
         this.hashedSenderId = SimpleDhtProvider.generateHash(Integer.toString(senderId));
-        this.valueString = valueString;
         this.requestType = requestType;
-        if (valueString != null)
-            this.hashedQuery = SimpleDhtProvider.generateHash(valueString);
-        else
-            this.hashedQuery = null;
+        this.key = null;
+        this.value = null;
+    }
+
+    Request(int senderId, String key, String value, RequestType requestType){
+        this.senderId = senderId;
+        this.hashedSenderId = SimpleDhtProvider.generateHash(Integer.toString(senderId));
+        this.requestType = requestType;
+        this.key = key;
+        this.value = value;
     }
 
     /* To parse from the string */
     Request(String string) throws IOException {
         String[] strings = string.split(this.seperator);
         if (strings.length == 5) {
-            this.valueString = strings[0];
-            this.requestType = RequestType.valueOf(strings[1]);
-            this.hashedQuery = strings[2];
-            this.senderId = Integer.parseInt(strings[3]);
-            this.hashedSenderId = strings[4];
+            this.requestType = RequestType.valueOf(strings[0]);
+            this.senderId = Integer.parseInt(strings[1]);
+            this.hashedSenderId = strings[2];
+            this.key = strings[3];
+            this.value = strings[4];
         } else {
             Log.d(TAG, string + " " + strings.length);
             throw new IOException("Unable to parse the String");
@@ -47,10 +52,13 @@ public class Request {
         return requestType;
     }
 
-    public String getValueString(){
-        return valueString;
+    public String getKey() {
+        return key;
     }
 
+    public String getValue() {
+        return value;
+    }
 
     public int getSenderId() {
         return this.senderId;
@@ -60,18 +68,9 @@ public class Request {
         return this.hashedSenderId;
     }
 
-    public int getIntegerFromQuery(){
-        return Integer.parseInt(valueString);
-    }
-
     @Override
     public String toString() {
-        return valueString + separator + requestType + separator + hashedQuery + separator +
-                senderId + separator + hashedSenderId;
-    }
-
-    public String encode() {
-        return valueString + seperator + requestType + seperator + hashedQuery + seperator +
-                senderId + seperator + hashedSenderId;
+        return requestType + seperator + senderId + seperator + hashedSenderId + seperator +
+                key + seperator + value;
     }
 }
