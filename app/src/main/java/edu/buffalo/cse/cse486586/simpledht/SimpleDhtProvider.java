@@ -345,8 +345,7 @@ public class SimpleDhtProvider extends ContentProvider {
             cursor = querySingle(selection);
         else {
             try {
-                throw new IOException("What?");
-//                cursor = queryInDHT(selection);
+                cursor = queryInDHT(selection);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -453,8 +452,8 @@ public class SimpleDhtProvider extends ContentProvider {
                     toReturn = successor.ois.readUTF();
                 }
                 Log.d(QUERY_TAG, toReturn);
-                predecessor.oos.writeUTF(toReturn);
-                predecessor.oos.flush();
+                oos.writeUTF(toReturn);
+                oos.flush();
             }
 
             void deleteHandler(Request request) throws IOException {
@@ -497,9 +496,12 @@ public class SimpleDhtProvider extends ContentProvider {
                 //Read from the socket
                 while (true) {
                     Request request = null;
+                    String requestString = null;
                     try {
-                        request = new Request(ois.readUTF());
+                        requestString = ois.readUTF();
+                        request = new Request(requestString);
                     } catch (IOException e) {
+                        Log.e("PARSING_ERROR", requestString );
                         e.printStackTrace();
                     }
                     try {
