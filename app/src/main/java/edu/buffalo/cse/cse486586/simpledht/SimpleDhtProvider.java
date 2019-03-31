@@ -29,7 +29,7 @@ public class SimpleDhtProvider extends ContentProvider {
     SQLiteDatabase dbWriter, dbReader;
     static final int selfProcessIdLen = 4;
     int myID;
-    String myHashedID;
+    String myHash;
     Client successor, predecessor;
     static final int serverId = 5554;
     TreeMap<String, Client> chordRingMap;
@@ -86,12 +86,20 @@ public class SimpleDhtProvider extends ContentProvider {
         return id;
     }
 
-    private boolean belongsToMe(String key) {
+    private boolean belongsToMe(String keyHash) {
         // If has neighbours
         if (predecessor != null && successor != null) {
             // Hash of key lies in its range then return true else false
             //TODO: fix this condition for 1st node
-            if (key.compareTo(predecessor.getHashedId()) > 0 && key.compareTo(myHashedID) < 0)
+            String predecessorHash = predecessor.getHashedId();
+            String successorHash = successor.getHashedId();
+
+            /* Other Node - check if in hashspace */
+            if (keyHash.compareTo(predecessorHash) > 0 && keyHash.compareTo(myHash) < 0)
+                return true;
+            /* First Node - check if in hashspace */
+            else if (myHash.compareTo(predecessorHash) < 0 &&
+                    (keyHash.compareTo(predecessorHash) > 0 || keyHash.compareTo(myHash) < 0))
                 return true;
             else
                 return false;
@@ -196,9 +204,9 @@ public class SimpleDhtProvider extends ContentProvider {
         successor = null;
         predecessor = null;
 
-        myHashedID = generateHash(myID);
+        myHash = generateHash(myID);
 
-        Log.d(CREATE_TAG, "id is " + myID + " " + myHashedID);
+        Log.d(CREATE_TAG, "id is " + myID + " " + myHash);
 
         new Server().start();
 
@@ -398,7 +406,7 @@ public class SimpleDhtProvider extends ContentProvider {
                             }
                             break;
                         case QUIT:
-                            Log.d(TAG, "Dying");
+                            Log.d(TAG, "Thread dying :-|");
                             return;
                         case QUERY:
                             break;
