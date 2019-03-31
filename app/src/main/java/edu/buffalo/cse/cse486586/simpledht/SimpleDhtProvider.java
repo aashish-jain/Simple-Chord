@@ -56,6 +56,21 @@ public class SimpleDhtProvider extends ContentProvider {
         return formatter.toString();
     }
 
+    public static String generateHash(int number) {
+        String input = Integer.toString(number);
+        MessageDigest sha1 = null;
+        try {
+            sha1 = MessageDigest.getInstance("SHA-1");
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+        byte[] sha1Hash = sha1.digest(input.getBytes());
+        Formatter formatter = new Formatter();
+        for (byte b : sha1Hash)
+            formatter.format("%02x", b);
+        return formatter.toString();
+    }
+
     public static void enableStrictMode() {
         StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
         StrictMode.setThreadPolicy(policy);
@@ -181,7 +196,7 @@ public class SimpleDhtProvider extends ContentProvider {
         successor = null;
         predecessor = null;
 
-        myHashedID = generateHash(Integer.toString(myID));
+        myHashedID = generateHash(myID);
 
         Log.d(CREATE_TAG, "id is " + myID + " " + myHashedID);
 
@@ -203,11 +218,11 @@ public class SimpleDhtProvider extends ContentProvider {
         /* If not server ask the server for new Nodes*/
         if (myID != serverId)
             fetchNeighbours();
-        /* Else just send them */
+            /* Else just send them */
         else {
             chordRingMap = new TreeMap<String, Client>();
             try {
-                chordRingMap.put(generateHash(Integer.toString(myID)), new Client(myID));
+                chordRingMap.put(generateHash(myID), new Client(myID));
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -314,21 +329,24 @@ public class SimpleDhtProvider extends ContentProvider {
                 successorInRing = chordRingMap.higherEntry(senderHash);
 
                 //Enforce the neighbours
-                int successorId = (successorInRing == null) ?
-                        chordRingMap.firstEntry().getValue().getConnectedId() :
-                        successorInRing.getValue().getConnectedId();
-                int predecessorId = (predecessorInRing == null) ?
-                        chordRingMap.lastEntry().getValue().getConnectedId() :
-                        predecessorInRing.getValue().getConnectedId();
+                successorInRing = (successorInRing != null) ?
+                        successorInRing : chordRingMap.firstEntry();
+                predecessorInRing = (predecessorInRing != null) ?
+                        predecessorInRing : chordRingMap.lastEntry();
+
+                int predecessorId = predecessorInRing.getValue().getConnectedId();
+                int successorId = successorInRing.getValue().getConnectedId();
                 Log.d(TAG, senderId + " Got predId = " + predecessorId + " succId = " + successorId);
 
                 /* Sends back the successor and predecessor to the requesting node*/
                 oos.writeInt(predecessorId);
                 oos.writeInt(successorId);
                 oos.flush();
+
+                /* Ask the neighbours to consider the new node as successor or predecessor */
+//                predecessorInRing.getValue().oos.writeUTF(new Request(successorId, null, RequestType.UPDATE_SUCCESSOR).encode());
+//                successorInRing.getValue().oos.writeUTF(new Request(successorId, null, RequestType.UPDATE_PREDECESSOR).encode());
                 Log.d(TAG, "Flushed to " + senderId);
-
-
             }
 
             void updateNeighbour(Request request) {
@@ -432,7 +450,7 @@ public class SimpleDhtProvider extends ContentProvider {
         Client(int remoteProcessId) throws IOException {
             /* Establish the connection to server and store it in a Hashmap*/
             connectedId = remoteProcessId;
-            hashedConnectedId = generateHash(Integer.toString(remoteProcessId));
+            hashedConnectedId = generateHash(remoteProcessId);
             isConnected = false;
             socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                     remoteProcessId * 2);
