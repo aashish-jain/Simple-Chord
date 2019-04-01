@@ -4,7 +4,6 @@ import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
-import android.database.DatabaseUtils;
 import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
@@ -103,9 +102,13 @@ public class SimpleDhtProvider extends ContentProvider {
         String[] splitValues;
         for (String row : queryResult.split("\n")) {
             splitValues = row.split(",");
-            key = splitValues[0];
-            value = splitValues[1];
-            matrixCursor.addRow(new String[]{key, value});
+            try {
+                key = splitValues[0];
+                value = splitValues[1];
+                matrixCursor.addRow(new String[]{key, value});
+            } catch (Exception e){
+
+            }
         }
         return matrixCursor;
     }
@@ -166,8 +169,6 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     public int deleteFromDHT(String key) {
-//        Log.d(DELETE_TAG, "Not yet implemented");
-//        return 0;
         return deleteSingle(key);
     }
 
@@ -288,17 +289,15 @@ public class SimpleDhtProvider extends ContentProvider {
                 null, null);
     }
 
-    public Cursor queryAll() {
+    public Cursor queryAll() throws IOException {
         Cursor cursor = null;
         if (predecessor == null && successor == null)
             cursor = queryAllLocal();
         else {
-            try {
-                throw new IOException("WHAT ?");
-//                cursor = queryInDHT("*");
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            Request request = new Request(myID, RequestType.QUERY_ALL);
+            successor.oos.writeUTF(request.toString());
+            successor.oos.flush();
+            cursor = cursorFromString(successor.ois.readUTF());
         }
         return cursor;
     }
@@ -337,8 +336,13 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.d(QUERY_TAG, "Querying " + selection);
         Cursor cursor = null;
         /* Query for all local data*/
-        if (selection.equals("*"))
-            cursor = queryAll();
+        if (selection.equals("*")) {
+            try {
+                cursor = queryAll();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
         else if (selection.equals("@"))
             cursor = queryAllLocal();
         else if (belongsToMe(selection))
@@ -446,12 +450,33 @@ public class SimpleDhtProvider extends ContentProvider {
                 if (belongsToMe(key)) {
                     Cursor cursor = querySingle(key);
                     toReturn = cursorToString(cursor);
-                } else {
+                }
+                else {
                     successor.oos.writeUTF(request.toString());
                     successor.oos.flush();
                     toReturn = successor.ois.readUTF();
                 }
                 Log.d(QUERY_TAG, toReturn);
+                oos.writeUTF(toReturn);
+                oos.flush();
+            }
+
+            void queryAllHandler(Request request) throws IOException {
+                Log.d("QUERYALL", request.toString());
+                String toReturn;
+                if( request.getSenderId() != myID){
+                    successor.oos.writeUTF(request.toString());
+                    successor.oos.flush();
+                    Log.d("QUERYALL", "Flushed. Waiting");
+                    toReturn = successor.ois.readUTF() + "\n" + cursorToString(queryAllLocal());
+                    Log.d("QUERYALL", "Got reply");
+                }
+                else {
+                    toReturn = cursorToString(queryAllLocal());
+                    Log.d("QUERYALL", "Starting Return\n" + toReturn);
+                }
+                Log.d("QUERYALL", "Returning");
+                Log.d(QUERY_TAG, "\n" + toReturn);
                 oos.writeUTF(toReturn);
                 oos.flush();
             }
@@ -496,12 +521,9 @@ public class SimpleDhtProvider extends ContentProvider {
                 //Read from the socket
                 while (true) {
                     Request request = null;
-                    String requestString = null;
                     try {
-                        requestString = ois.readUTF();
-                        request = new Request(requestString);
+                        request = new Request(ois.readUTF());
                     } catch (IOException e) {
-                        Log.e("PARSING_ERROR", requestString );
                         e.printStackTrace();
                     }
                     try {
@@ -514,6 +536,9 @@ public class SimpleDhtProvider extends ContentProvider {
                                 return;
                             case QUERY:
                                 queryHandler(request);
+                                break;
+                            case QUERY_ALL:
+                                queryAllHandler(request);
                                 break;
                             case INSERT:
                                 insertHandler(request);
