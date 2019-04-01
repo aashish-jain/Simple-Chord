@@ -106,7 +106,7 @@ public class SimpleDhtProvider extends ContentProvider {
                 key = splitValues[0];
                 value = splitValues[1];
                 matrixCursor.addRow(new String[]{key, value});
-            } catch (Exception e){
+            } catch (Exception e) {
 
             }
         }
@@ -162,29 +162,38 @@ public class SimpleDhtProvider extends ContentProvider {
                 null, null);
     }
 
-    public int deleteAll() {
-//        Log.d(DELETE_TAG, "Not yet implemented");
-//        return 0;
-        return deleteAllLocal();
+    public void deleteAll() throws IOException {
+        successor.oos.writeUTF(new Request(myID, RequestType.DELETE_ALL).toString());
+        successor.oos.flush();
     }
 
-    public int deleteFromDHT(String key) {
-        return deleteSingle(key);
+    public void deleteFromDHT(String key) throws IOException {
+        successor.oos.writeUTF(new Request(myID, key, null, RequestType.DELETE).toString());
+        successor.oos.flush();
     }
 
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
 
         /* https://stackoverflow.com/questions/7510219/deleting-row-in-sqlite-in-android */
-        int deleted;
+        int deleted = 0;
         if (selection.equals("@"))
             deleted = deleteAllLocal();
-        else if (selection.equals("*"))
-            deleted = deleteAll();
-        else if (belongsToMe(selection))
+        else if (selection.equals("*")) {
+            try {
+                deleteAll();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else if (belongsToMe(selection))
             deleted = deleteSingle(selection);
-        else
-            deleted = deleteFromDHT(selection);
+        else {
+            try {
+                deleteFromDHT(selection);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
         Log.d(DELETE_TAG, "Removed " + deleted + " messages");
         return deleted;
     }
@@ -342,8 +351,7 @@ public class SimpleDhtProvider extends ContentProvider {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        }
-        else if (selection.equals("@"))
+        } else if (selection.equals("@"))
             cursor = queryAllLocal();
         else if (belongsToMe(selection))
             cursor = querySingle(selection);
@@ -450,8 +458,7 @@ public class SimpleDhtProvider extends ContentProvider {
                 if (belongsToMe(key)) {
                     Cursor cursor = querySingle(key);
                     toReturn = cursorToString(cursor);
-                }
-                else {
+                } else {
                     successor.oos.writeUTF(request.toString());
                     successor.oos.flush();
                     toReturn = successor.ois.readUTF();
@@ -464,14 +471,13 @@ public class SimpleDhtProvider extends ContentProvider {
             void queryAllHandler(Request request) throws IOException {
                 Log.d("QUERYALL", request.toString());
                 String toReturn;
-                if( request.getSenderId() != myID){
+                if (request.getSenderId() != myID) {
                     successor.oos.writeUTF(request.toString());
                     successor.oos.flush();
                     Log.d("QUERYALL", "Flushed. Waiting");
                     toReturn = successor.ois.readUTF() + "\n" + cursorToString(queryAllLocal());
                     Log.d("QUERYALL", "Got reply");
-                }
-                else {
+                } else {
                     toReturn = cursorToString(queryAllLocal());
                     Log.d("QUERYALL", "Starting Return\n" + toReturn);
                 }
@@ -488,6 +494,14 @@ public class SimpleDhtProvider extends ContentProvider {
                     deleteSingle(key);
                     Log.d(TAG, "Will delete here - " + request.toString());
                 } else {
+                    successor.oos.writeUTF(request.toString());
+                    successor.oos.flush();
+                }
+            }
+
+            void deleteAllHandler(Request request) throws IOException {
+                Log.d(DELETE_TAG, request.toString());
+                if (myID != request.getSenderId()) {
                     successor.oos.writeUTF(request.toString());
                     successor.oos.flush();
                 }
@@ -546,6 +560,8 @@ public class SimpleDhtProvider extends ContentProvider {
                             case DELETE:
                                 deleteHandler(request);
                                 break;
+                            case DELETE_ALL:
+                                deleteAllHandler(request);
                             case UPDATE_PREDECESSOR:
                             case UPDATE_SUCCESSOR:
                                 updateNeighbour(request);
