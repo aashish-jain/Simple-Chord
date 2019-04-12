@@ -163,6 +163,7 @@ public class SimpleDhtProvider extends ContentProvider {
     }
 
     public void deleteAll() throws IOException {
+        deleteAllLocal();
         successor.oos.writeUTF(new Request(myID, RequestType.DELETE_ALL).toString());
         successor.oos.flush();
     }
@@ -493,7 +494,7 @@ public class SimpleDhtProvider extends ContentProvider {
                 if (belongsToMe(key)) {
                     deleteSingle(key);
                     Log.d(TAG, "Will delete here - " + request.toString());
-                } else if(myID != request.getSenderId()){
+                } else if (myID != request.getSenderId()) {
                     successor.oos.writeUTF(request.toString());
                     successor.oos.flush();
                 }
