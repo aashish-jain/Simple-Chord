@@ -564,6 +564,7 @@ public class SimpleDhtProvider extends ContentProvider {
                                 break;
                             case DELETE_ALL:
                                 deleteAllHandler(request);
+                                break;
                             case UPDATE_PREDECESSOR:
                             case UPDATE_SUCCESSOR:
                                 updateNeighbour(request);
